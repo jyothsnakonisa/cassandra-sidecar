@@ -1,196 +1,26 @@
-# Java Gradle CircleCI 2.0 configuration file
-#
-# Check https://circleci.com/docs/2.0/language-java/ for more details
-#
+# Use the latest 2.1 version of CircleCI pipeline process engine.
+# See: https://circleci.com/docs/2.0/configuration-reference
 version: 2.1
 
-# need to reuse the same base environment for several tests
-aliases:
-  base_job: &base_job
-    machine:
-      image: ubuntu-2004:202010-01
-    working_directory: ~/repo
-    environment:
-      TERM: dumb
-  centos: &centos
-    docker:
-      - image: centos:centos8
-    working_directory: ~/repo
-    environment:
-      TERM: dumb
-      TZ: "America/Los_Angeles"
-
-# we might modify this in the future to accept a parameter for the java package to install
-commands:
-  install_java:
-    description: "Installs Java using AdoptOpenJDK"
-    parameters:
-      version:
-        type: string
-    steps:
-      - run: wget -qO - https://adoptopenjdk.jfrog.io/adoptopenjdk/api/gpg/key/public | sudo apt-key add -
-      - run: sudo add-apt-repository --yes https://adoptopenjdk.jfrog.io/adoptopenjdk/deb/
-      - run: sudo apt-get update
-      - run: sudo apt-get install -y << parameters.version>>
-
-  install_common:
-    description: "Installs common software and certificates"
-    steps:
-      - run: sudo apt-get update
-      - run: sudo apt-get install apt-transport-https ca-certificates curl gnupg-agent software-properties-common
-
+# Define a job to be invoked later in a workflow.
+# See: https://circleci.com/docs/2.0/configuration-reference/#jobs
 jobs:
-  # Runs java 8 tests on a docker image
-  java8_docker:
+  say-hello:
+    # Specify the execution environment. You can specify an image from Dockerhub or use one of our Convenience Images from CircleCI's Developer Hub.
+    # See: https://circleci.com/docs/2.0/configuration-reference/#docker-machine-macos-windows-executor
     docker:
-     - image: circleci/openjdk:8-jdk-stretch
-    steps:
-     - checkout
-
-     - run: ./gradlew -i clean test -x :cassandra-integration-tests:test --stacktrace
-
-     - store_artifacts:
-         path: build/reports
-         destination: test-reports
-
-     - store_test_results:
-         path: ~/repo/build/test-results/
-
-  # Runs java 8 tests on a VM to be able to run Docker for integration tests
-  java8:
-    <<: *base_job
-
+      - image: cimg/base:stable
+    # Add steps to the job
+    # See: https://circleci.com/docs/2.0/configuration-reference/#steps
     steps:
       - checkout
-      - install_common
+      - run:
+          name: "Say hello"
+          command: "echo Hello, World!"
 
-      - install_java:
-          version: adoptopenjdk-8-hotspot
-      - run: sudo update-java-alternatives -s adoptopenjdk-8-hotspot-amd64 && java -version
-      - run: ./gradlew -i clean test --stacktrace
-
-      - store_artifacts:
-          path: build/reports
-          destination: test-reports
-
-      - store_test_results:
-          path: ~/repo/build/test-results/
-
-      - store_test_results:
-          path: ~/repo/cassandra-integration-tests/build/test-results/
-
-  # Runs java 11 tests on a docker image
-  java11_docker:
-    docker:
-      - image: circleci/openjdk:11-jdk-stretch
-    steps:
-      - checkout
-
-      - run: ./gradlew -i clean test -x :cassandra-integration-tests:test --stacktrace
-
-      - store_artifacts:
-          path: build/reports
-          destination: test-reports
-
-      - store_test_results:
-          path: ~/repo/build/test-results/
-
-  # Runs java 11 tests on a VM to be able to run Docker for integration tests
-  java11:
-    <<: *base_job
-
-    steps:
-      - checkout
-      - install_common
-
-      - install_java:
-          version: adoptopenjdk-11-hotspot
-      - run: sudo update-java-alternatives -s adoptopenjdk-11-hotspot-amd64 && java -version
-      - run: ./gradlew -i clean test --stacktrace
-
-      - store_artifacts:
-          path: build/reports
-          destination: test-reports
-
-      - store_test_results:
-          path: ~/repo/build/test-results/
-
-  # ensures we can build and install deb packages
-  deb_build_install:
-    docker:
-      - image: circleci/openjdk:11-jdk-stretch
-    steps:
-      - checkout
-      - run: ./gradlew -i clean buildDeb
-      - run: DEBIAN_FRONTEND=noninteractive sudo apt install -y ./build/distributions/cassandra-sidecar*.deb
-      - run: test -f /opt/cassandra-sidecar/bin/cassandra-sidecar
-
-  # ensures we can build and install rpm packages
-  rpm_build_install:
-    <<: *centos
-    steps:
-      - run: sed -i 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/CentOS-*
-      - run: sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-*
-      - run: dnf -qy distro-sync
-      - run: dnf -qy install java-11-openjdk git
-      - checkout
-      - run: JAVA_HOME=/usr/lib/jvm/java-11-openjdk-11.0.13.0.8-4.el8_5.x86_64 ${PWD}/gradlew -i buildRpm
-      - run: yum install -y ./build/distributions/cassandra-sidecar*.rpm
-      - run: test -f /opt/cassandra-sidecar/bin/cassandra-sidecar
-
-  docker_build:
-    <<: *base_job
-    steps:
-      - checkout
-      - run: ./gradlew -i clean jibDockerBuild
-
-  docs_build:
-    docker:
-      - image: circleci/openjdk:11-jdk-stretch
-    steps:
-      - checkout
-      - run: ./gradlew docs:asciidoctor
-      - run: test -f docs/build/html5/user.html
-
+# Invoke jobs via workflows
+# See: https://circleci.com/docs/2.0/configuration-reference/#workflows
 workflows:
-  version: 2
-  build-and-test:
+  say-hello-workflow:
     jobs:
-      - java8_docker
-      - java11_docker
-      - java8:
-          requires:
-            - java8_docker
-      - java11:
-          requires:
-            - java11_docker
-      - docs_build:
-          requires:
-            - java8
-            - java8_docker
-            - java11
-            - java11_docker
-      - docker_build:
-          requires:
-            - java8
-            - java8_docker
-            - java11
-            - java11_docker
-      - rpm_build_install:
-          requires:
-            - java8
-            - java8_docker
-            - java11
-            - java11_docker
-      - deb_build_install:
-          requires:
-            - java8
-            - java8_docker
-            - java11
-            - java11_docker
-      - docker_build:
-          requires:
-            - java8
-            - java8_docker
-            - java11
-            - java11_docker
+      - say-hello
