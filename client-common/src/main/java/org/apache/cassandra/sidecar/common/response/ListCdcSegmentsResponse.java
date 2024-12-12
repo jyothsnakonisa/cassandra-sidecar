@@ -70,8 +70,14 @@ public class ListCdcSegmentsResponse
     @Override
     public boolean equals(Object o)
     {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o)
+        {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass())
+        {
+            return false;
+        }
         ListCdcSegmentsResponse that = (ListCdcSegmentsResponse) o;
         return port == that.port && Objects.equals(host, that.host) && Objects.equals(segmentInfos, that.segmentInfos);
     }

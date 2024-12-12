@@ -39,7 +39,7 @@ import org.apache.cassandra.sidecar.common.request.AbortRestoreJobRequest;
 import org.apache.cassandra.sidecar.common.request.CreateRestoreJobRequest;
 import org.apache.cassandra.sidecar.common.request.CreateRestoreJobSliceRequest;
 import org.apache.cassandra.sidecar.common.request.ImportSSTableRequest;
-import org.apache.cassandra.sidecar.common.request.ListCommitLogsRequest;
+import org.apache.cassandra.sidecar.common.request.ListCdcSegmentsRequest;
 import org.apache.cassandra.sidecar.common.request.RestoreJobProgressRequest;
 import org.apache.cassandra.sidecar.common.request.RestoreJobSummaryRequest;
 import org.apache.cassandra.sidecar.common.request.StreamCdcSegmentRequest;
@@ -502,13 +502,13 @@ public class SidecarClient implements AutoCloseable, SidecarClientBlobRestoreExt
     public CompletableFuture<ListCdcSegmentsResponse> listCdcSegments(SidecarInstance sidecarInstance)
     {
         return executor.executeRequestAsync(requestBuilder()
-                .singleInstanceSelectionPolicy(sidecarInstance)
-                .request(new ListCommitLogsRequest())
-                .build());
+                       .singleInstanceSelectionPolicy(sidecarInstance)
+                       .request(new ListCdcSegmentsRequest())
+                       .build());
     }
 
     /**
-     *  Streams CDC commit log segments from the requested instance.
+     * Streams CDC commit log segments from the requested instance.
      *
      * Streams the specified {@code range} of a CDC CommitLog from the given instance and the
      * stream is consumed by the {@link StreamConsumer consumer}.
@@ -516,20 +516,16 @@ public class SidecarClient implements AutoCloseable, SidecarClientBlobRestoreExt
      * @param sidecarInstance instance on which the CDC commit logs are to be streamed
      * @param segment segment file name
      * @param range range of the file to be streamed
-     * @param partitionId partition ID
-     * @param batchId batchId
      * @param streamConsumer object that consumes the stream
      */
-    public void streamCommitLogs(SidecarInstance sidecarInstance,
-                                 String segment,
-                                 HttpRange range,
-                                 String partitionId,
-                                 String batchId,
-                                 StreamConsumer streamConsumer)
+    public void streamCdcSegments(SidecarInstance sidecarInstance,
+                                  String segment,
+                                  HttpRange range,
+                                  StreamConsumer streamConsumer)
     {
         executor.streamRequest(requestBuilder()
                 .singleInstanceSelectionPolicy(sidecarInstance)
-                .request(new StreamCdcSegmentRequest(segment, range, partitionId, batchId))
+                .request(new StreamCdcSegmentRequest(segment, range))
                 .build(), streamConsumer);
     }
 

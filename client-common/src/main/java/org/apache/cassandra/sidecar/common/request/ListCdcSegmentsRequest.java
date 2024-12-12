@@ -25,9 +25,9 @@ import org.apache.cassandra.sidecar.common.response.ListCdcSegmentsResponse;
 /**
  * Represents a request for listing commit log files on an instance
  */
-public class ListCommitLogsRequest extends JsonRequest<ListCdcSegmentsResponse>
+public class ListCdcSegmentsRequest extends JsonRequest<ListCdcSegmentsResponse>
 {
-    public ListCommitLogsRequest()
+    public ListCdcSegmentsRequest()
     {
         super(createRequestURI());
     }

@@ -18,10 +18,6 @@
  */
 package org.apache.cassandra.sidecar.common.request;
 
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
-
 import io.netty.handler.codec.http.HttpMethod;
 import org.apache.cassandra.sidecar.common.ApiEndpointsV1;
 import org.apache.cassandra.sidecar.common.utils.HttpRange;
@@ -31,18 +27,12 @@ import org.apache.cassandra.sidecar.common.utils.HttpRange;
  */
 public class StreamCdcSegmentRequest extends Request
 {
-    private final String segment;
     private final HttpRange range;
-    private final String batchId;
-    private final String partitionId;
 
-    public StreamCdcSegmentRequest(String segment, HttpRange range, String batchId, String partitionId)
+    public StreamCdcSegmentRequest(String segment, HttpRange range)
     {
         super(requestURI(segment));
-        this.segment = segment;
         this.range = range;
-        this.batchId = batchId;
-        this.partitionId = partitionId;
     }
 
     @Override
@@ -52,16 +42,9 @@ public class StreamCdcSegmentRequest extends Request
     }
 
     @Override
-    public Map<String, String> headers()
+    protected HttpRange range()
     {
-        Map<String, String> headers = new HashMap<>(super.headers());
-        headers.put("X-Stream-Batch", batchId);
-        headers.put("X-Stream-Partition", partitionId);
-        if (range != null)
-        {
-            headers.put("Range", String.format("bytes=%d-%d", range.start(), range.end()));
-        }
-        return Collections.unmodifiableMap(headers);
+        return range;
     }
 
     private static String requestURI(String segment)

@@ -1562,7 +1562,7 @@ abstract class SidecarClientTest
                 latch.countDown();
             }
         };
-        client.streamCommitLogs(instance, "testSegment", HttpRange.of(0, 1), "testPartitionId", "testBatchId", mockStreamConsumer);
+        client.streamCdcSegments(instance, "testSegment", HttpRange.of(0, 1), mockStreamConsumer);
         latch.await();
         byte[] bytes = receivedBytes.stream()
                 .collect(ByteArrayOutputStream::new,
