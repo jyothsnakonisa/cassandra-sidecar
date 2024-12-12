@@ -1528,11 +1528,12 @@ abstract class SidecarClientTest
     public void testStreamCdcSegments() throws InterruptedException
     {
         MockResponse response = new MockResponse();
+        // mock reading the first 12 bytes, i.e. "Test Content" from a large blob (1024).
         response.setResponseCode(200)
                 .setHeader(HttpHeaderNames.CONTENT_TYPE.toString(),
-                        HttpHeaderValues.APPLICATION_OCTET_STREAM)
+                           HttpHeaderValues.APPLICATION_OCTET_STREAM)
                 .setHeader(HttpHeaderNames.ACCEPT_RANGES.toString(), "bytes")
-                .setHeader(HttpHeaderNames.CONTENT_RANGE.toString(), "bytes 10-20/80")
+                .setHeader(HttpHeaderNames.CONTENT_RANGE.toString(), "bytes 0-11/1024")
                 .setBody("Test Content");
         enqueue(response);
 
@@ -1562,15 +1563,14 @@ abstract class SidecarClientTest
                 latch.countDown();
             }
         };
-        client.streamCdcSegments(instance, "testSegment", HttpRange.of(0, 1), mockStreamConsumer);
+        client.streamCdcSegments(instance, "testSegment", HttpRange.of(0, 11), mockStreamConsumer);
         latch.await();
-        byte[] bytes = receivedBytes.stream()
-                .collect(ByteArrayOutputStream::new,
-                        (outputStream, src) -> outputStream.write(src, 0, src.length),
-                        (outputStream, src) -> {
-                        })
-                .toByteArray();
-        assertThat(new String(bytes, StandardCharsets.UTF_8)).isEqualTo("Test Content");
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        for (byte[] bytes : receivedBytes)
+        {
+            baos.write(bytes, 0, bytes.length);
+        }
+        assertThat(new String(baos.toByteArray(), StandardCharsets.UTF_8)).isEqualTo("Test Content");
     }
 
     private void enqueue(MockResponse response)
