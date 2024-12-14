@@ -29,17 +29,12 @@ public class ListCdcSegmentsRequest extends JsonRequest<ListCdcSegmentsResponse>
 {
     public ListCdcSegmentsRequest()
     {
-        super(createRequestURI());
+        super(ApiEndpointsV1.LIST_CDC_SEGMENTS_ROUTE);
     }
 
     @Override
     public HttpMethod method()
     {
         return HttpMethod.GET;
-    }
-
-    private static String createRequestURI()
-    {
-        return ApiEndpointsV1.LIST_CDC_SEGMENTS_ROUTE;
     }
 }
