@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package io.vertx.ext.auth.mtls.utils;
+package org.apache.cassandra.testing.utils.tls;
 
 import java.io.OutputStream;
 import java.nio.file.Files;
@@ -29,7 +29,7 @@ import java.security.cert.X509Certificate;
 import java.util.Objects;
 
 /**
- * Class to help represent Certificates for testing uses. Allows you to make temporary keystores and truststores.
+ * This class is copied from the Apache Cassandra code
  */
 public class CertificateBundle
 {
@@ -39,14 +39,14 @@ public class CertificateBundle
     private final KeyPair keyPair;
     private final String alias;
 
-    public CertificateBundle(String signatureAlgorithm, X509Certificate[] chain, X509Certificate root,
-                             KeyPair keyPair, String alias)
+    public CertificateBundle(String signatureAlgorithm, X509Certificate[] chain,
+                             X509Certificate root, KeyPair keyPair, String alias)
     {
         this.signatureAlgorithm = Objects.requireNonNull(signatureAlgorithm);
-        this.chain = chain.clone();
+        this.chain = chain;
         this.root = root;
         this.keyPair = keyPair;
-        this.alias = (alias != null) ? alias : "1";
+        this.alias = alias != null ? alias : "1";
     }
 
     public KeyStore toKeyStore(char[] keyEntryPassword) throws KeyStoreException

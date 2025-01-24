@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package io.vertx.ext.auth.mtls.utils;
+package org.apache.cassandra.testing.utils.tls;
 
 import java.io.IOException;
 import java.math.BigInteger;
@@ -27,14 +27,15 @@ import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
+import java.security.spec.AlgorithmParameterSpec;
 import java.security.spec.ECGenParameterSpec;
+import java.security.spec.RSAKeyGenParameterSpec;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Objects;
-
 import javax.security.auth.x500.X500Principal;
 
 import org.bouncycastle.asn1.x500.X500Name;
@@ -46,67 +47,72 @@ import org.bouncycastle.cert.X509CertificateHolder;
 import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
 import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
 import org.bouncycastle.operator.ContentSigner;
-import org.bouncycastle.operator.OperatorCreationException;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 
 /**
- * For building certificates for unit testing with specified details such as issuer, validity date etc.
+ * A utility class to generate certificates for tests.
+ *
+ * <p>This class is copied from the Apache Cassandra code
  */
 public class CertificateBuilder
 {
-    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
-    private static final String ALGORITHM = "EC";
-    private static final ECGenParameterSpec ALGORITHM_PARAMETER_SPEC = new ECGenParameterSpec("secp256r1");
-    private static final String SIGNATURE_ALGORITHM = "SHA256WITHECDSA";
     private static final GeneralName[] EMPTY_SAN = {};
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
+    private boolean isCertificateAuthority;
     private String alias;
-    private BigInteger serial = new BigInteger(159, SECURE_RANDOM);
+    private X500Name subject;
+    private SecureRandom random;
     private Date notBefore = Date.from(Instant.now().minus(1, ChronoUnit.DAYS));
     private Date notAfter = Date.from(Instant.now().plus(1, ChronoUnit.DAYS));
-    private X500Name subject;
+    private String algorithm;
+    private AlgorithmParameterSpec algorithmParameterSpec;
+    private String signatureAlgorithm;
+    private BigInteger serial;
     private final List<GeneralName> subjectAlternativeNames = new ArrayList<>();
-    private boolean isCertificateAuthority;
 
-    public CertificateBuilder alias(String alias)
+    public CertificateBuilder()
     {
-        this.alias = Objects.requireNonNull(alias);
-        return this;
+        ecp256Algorithm();
     }
 
-    public CertificateBuilder serial(BigInteger serial)
+    public CertificateBuilder isCertificateAuthority(boolean isCertificateAuthority)
     {
-        this.serial = serial;
-        return this;
-    }
-
-    public CertificateBuilder notBefore(Date notBefore)
-    {
-        this.notBefore = Date.from(notBefore.toInstant());
-        return this;
-    }
-
-    public CertificateBuilder notAfter(Date notAfter)
-    {
-        this.notAfter = Date.from(notBefore.toInstant());
+        this.isCertificateAuthority = isCertificateAuthority;
         return this;
     }
 
     public CertificateBuilder subject(String subject)
     {
-        this.subject = new X500Name(subject);
+        this.subject = new X500Name(Objects.requireNonNull(subject));
+        return this;
+    }
+
+    public CertificateBuilder notBefore(Instant notBefore)
+    {
+        return notBefore(Date.from(Objects.requireNonNull(notBefore)));
+    }
+
+    private CertificateBuilder notBefore(Date notBefore)
+    {
+        this.notBefore = Objects.requireNonNull(notBefore);
+        return this;
+    }
+
+    public CertificateBuilder notAfter(Instant notAfter)
+    {
+        return notAfter(Date.from(Objects.requireNonNull(notAfter)));
+    }
+
+    private CertificateBuilder notAfter(Date notAfter)
+    {
+        this.notAfter = Objects.requireNonNull(notAfter);
         return this;
     }
 
     public CertificateBuilder addSanUriName(String uri)
     {
         subjectAlternativeNames.add(new GeneralName(GeneralName.uniformResourceIdentifier, uri));
-        return this;
-    }
-
-    public CertificateBuilder isCertificateAuthority(boolean isCertificateAuthority)
-    {
-        this.isCertificateAuthority = isCertificateAuthority;
         return this;
     }
 
@@ -122,33 +128,60 @@ public class CertificateBuilder
         return this;
     }
 
-    public static CertificateBuilder builder()
+    public CertificateBuilder secureRandom(SecureRandom secureRandom)
     {
-        return new CertificateBuilder();
+        this.random = Objects.requireNonNull(secureRandom);
+        return this;
+    }
+
+    public CertificateBuilder alias(String alias)
+    {
+        this.alias = Objects.requireNonNull(alias);
+        return this;
+    }
+
+    public CertificateBuilder serial(BigInteger serial)
+    {
+        this.serial = serial;
+        return this;
+    }
+
+    public CertificateBuilder ecp256Algorithm()
+    {
+        this.algorithm = "EC";
+        this.algorithmParameterSpec = new ECGenParameterSpec("secp256r1");
+        this.signatureAlgorithm = "SHA256WITHECDSA";
+        return this;
+    }
+
+    public CertificateBuilder rsa2048Algorithm()
+    {
+        this.algorithm = "RSA";
+        this.algorithmParameterSpec = new RSAKeyGenParameterSpec(2048, RSAKeyGenParameterSpec.F4);
+        this.signatureAlgorithm = "SHA256WITHRSA";
+        return this;
     }
 
     public CertificateBundle buildSelfSigned() throws Exception
     {
         KeyPair keyPair = generateKeyPair();
 
-        JcaX509v3CertificateBuilder builder = new JcaX509v3CertificateBuilder(subject, serial, notBefore, notAfter, subject, keyPair.getPublic());
+        JcaX509v3CertificateBuilder builder = createCertBuilder(subject, subject, keyPair);
         addExtensions(builder);
 
-        ContentSigner signer = new JcaContentSignerBuilder(SIGNATURE_ALGORITHM).build(keyPair.getPrivate());
+        ContentSigner signer = new JcaContentSignerBuilder(signatureAlgorithm).build(keyPair.getPrivate());
         X509CertificateHolder holder = builder.build(signer);
         X509Certificate root = new JcaX509CertificateConverter().getCertificate(holder);
-        return new CertificateBundle(SIGNATURE_ALGORITHM, new X509Certificate[]{ root }, root, keyPair, alias);
+        return new CertificateBundle(signatureAlgorithm, new X509Certificate[]{root}, root, keyPair, alias);
     }
 
-    public CertificateBundle buildIssuedBy(CertificateBundle issuer)
-    throws GeneralSecurityException, IOException, OperatorCreationException
+    public CertificateBundle buildIssuedBy(CertificateBundle issuer) throws Exception
     {
         String issuerSignAlgorithm = issuer.signatureAlgorithm();
         return buildIssuedBy(issuer, issuerSignAlgorithm);
     }
 
-    public CertificateBundle buildIssuedBy(CertificateBundle issuer, String issuerSignAlgorithm)
-    throws GeneralSecurityException, IOException, OperatorCreationException
+    public CertificateBundle buildIssuedBy(CertificateBundle issuer, String issuerSignAlgorithm) throws Exception
     {
         KeyPair keyPair = generateKeyPair();
 
@@ -170,14 +203,26 @@ public class CertificateBuilder
         X509Certificate[] path = new X509Certificate[issuerPath.length + 1];
         path[0] = cert;
         System.arraycopy(issuerPath, 0, path, 1, issuerPath.length);
-        return new CertificateBundle(SIGNATURE_ALGORITHM, path, issuer.rootCertificate(), keyPair, alias);
+        return new CertificateBundle(signatureAlgorithm, path, issuer.rootCertificate(), keyPair, alias);
+    }
+
+    private SecureRandom secureRandom()
+    {
+        return random != null ? random : SECURE_RANDOM;
     }
 
     private KeyPair generateKeyPair() throws GeneralSecurityException
     {
-        KeyPairGenerator keyGen = KeyPairGenerator.getInstance(ALGORITHM);
-        keyGen.initialize(ALGORITHM_PARAMETER_SPEC, SECURE_RANDOM);
+        KeyPairGenerator keyGen = KeyPairGenerator.getInstance(algorithm);
+        keyGen.initialize(algorithmParameterSpec, secureRandom());
         return keyGen.generateKeyPair();
+    }
+
+    private JcaX509v3CertificateBuilder createCertBuilder(X500Name issuer, X500Name subject, KeyPair keyPair)
+    {
+        BigInteger serial = this.serial != null ? this.serial : new BigInteger(159, secureRandom());
+        PublicKey pubKey = keyPair.getPublic();
+        return new JcaX509v3CertificateBuilder(issuer, serial, notBefore, notAfter, subject, pubKey);
     }
 
     private void addExtensions(JcaX509v3CertificateBuilder builder) throws IOException
@@ -193,12 +238,5 @@ public class CertificateBuilder
             builder.addExtension(Extension.subjectAlternativeName, criticality,
                                  new GeneralNames(subjectAlternativeNames.toArray(EMPTY_SAN)));
         }
-    }
-
-    private JcaX509v3CertificateBuilder createCertBuilder(X500Name issuer, X500Name subject, KeyPair keyPair)
-    {
-        BigInteger serial = this.serial != null ? this.serial : new BigInteger(159, SECURE_RANDOM);
-        PublicKey pubKey = keyPair.getPublic();
-        return new JcaX509v3CertificateBuilder(issuer, serial, notBefore, notAfter, subject, pubKey);
     }
 }
