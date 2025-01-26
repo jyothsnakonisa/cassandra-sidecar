@@ -30,6 +30,7 @@ import static org.apache.cassandra.sidecar.common.response.GossipInfoResponse.Go
 import static org.apache.cassandra.sidecar.common.response.GossipInfoResponse.GossipField.GENERATION;
 import static org.apache.cassandra.sidecar.common.response.GossipInfoResponse.GossipField.HEARTBEAT;
 import static org.apache.cassandra.sidecar.common.response.GossipInfoResponse.GossipField.HOST_ID;
+import static org.apache.cassandra.sidecar.common.response.GossipInfoResponse.GossipField.INDEX_STATUS;
 import static org.apache.cassandra.sidecar.common.response.GossipInfoResponse.GossipField.INTERNAL_ADDRESS_AND_PORT;
 import static org.apache.cassandra.sidecar.common.response.GossipInfoResponse.GossipField.INTERNAL_IP;
 import static org.apache.cassandra.sidecar.common.response.GossipInfoResponse.GossipField.LOAD;
@@ -192,6 +193,12 @@ public class GossipInfoResponse extends HashMap<String, GossipInfoResponse.Gossi
         }
 
         @Nullable
+        public String indexStatus()
+        {
+            return read(this, INDEX_STATUS);
+        }
+
+        @Nullable
         public String tokens()
         {
             return read(this, TOKENS);
@@ -275,7 +282,9 @@ public class GossipInfoResponse extends HashMap<String, GossipInfoResponse.Gossi
          * as a comma-separated list.
          **/
         SSTABLE_VERSIONS,
-        DISK_USAGE;
+        DISK_USAGE,
+        INDEX_STATUS, // Introduced in Cassandra 5.0 for SAI 
+        ;
 
         static String read(GossipInfo gossipInfo, GossipField field)
         {
