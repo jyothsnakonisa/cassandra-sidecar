@@ -125,6 +125,7 @@ import org.apache.cassandra.sidecar.routes.RingHandler;
 import org.apache.cassandra.sidecar.routes.RoutingOrder;
 import org.apache.cassandra.sidecar.routes.SchemaHandler;
 import org.apache.cassandra.sidecar.routes.StreamSSTableComponentHandler;
+import org.apache.cassandra.sidecar.routes.StreamStatsHandler;
 import org.apache.cassandra.sidecar.routes.TimeSkewHandler;
 import org.apache.cassandra.sidecar.routes.TokenRangeReplicaMapHandler;
 import org.apache.cassandra.sidecar.routes.cassandra.NodeSettingsHandler;
@@ -341,6 +342,7 @@ public class MainModule extends AbstractModule
                               OperationalJobHandler operationalJobHandler,
                               ListOperationalJobsHandler listOperationalJobsHandler,
                               NodeDecommissionHandler nodeDecommissionHandler,
+                              StreamStatsHandler streamStatsHandler,
                               ErrorHandler errorHandler)
     {
         Router router = Router.router(vertx);
@@ -494,6 +496,11 @@ public class MainModule extends AbstractModule
         protectedRouteBuilderFactory.get().router(router).method(HttpMethod.PUT)
                                     .endpoint(ApiEndpointsV1.NODE_DECOMMISSION_ROUTE)
                                     .handler(nodeDecommissionHandler)
+                                    .build();
+
+        protectedRouteBuilderFactory.get().router(router).method(HttpMethod.GET)
+                                    .endpoint(ApiEndpointsV1.STREAM_STATS_ROUTE)
+                                    .handler(streamStatsHandler)
                                     .build();
 
         protectedRouteBuilderFactory.get().router(router).method(HttpMethod.PUT)

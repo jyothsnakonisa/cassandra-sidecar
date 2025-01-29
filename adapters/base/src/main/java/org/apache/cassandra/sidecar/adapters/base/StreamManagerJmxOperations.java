@@ -16,26 +16,22 @@
  * limitations under the License.
  */
 
-package org.apache.cassandra.sidecar.common.server;
+package org.apache.cassandra.sidecar.adapters.base;
 
-import org.apache.cassandra.sidecar.common.response.ConnectedClientStatsResponse;
-import org.apache.cassandra.sidecar.common.response.data.StreamsProgressStats;
+import java.util.Set;
+import javax.management.openmbean.CompositeData;
 
 /**
- * An interface that defines interactions with the metrics system in Cassandra.
+ * An interface that pulls methods from the Cassandra Stream manager Proxy
  */
-public interface MetricsOperations
+public interface StreamManagerJmxOperations
 {
-    /**
-     * Retrieve the connected client stats metrics from the cluster
-     * @param summaryOnly boolean parameter to list connection summary only
-     * @return the requested client stats, in full or summary
-     */
-    ConnectedClientStatsResponse connectedClientStats(boolean summaryOnly);
+
+    String STREAM_MANAGER_OBJ_NAME = "org.apache.cassandra.net:type=StreamManager";
 
     /**
-     * Retrieve the stream progress stats from the cluster
-     * @return the requested stream progress stats
+     * Returns the current snapshot of the progress of all ongoing streams.
+     * @return the current state of streams as a set of JMX {@link CompositeData} instances.
      */
-    StreamsProgressStats streamsProgressStats();
+    Set<CompositeData> getCurrentStreams();
 }

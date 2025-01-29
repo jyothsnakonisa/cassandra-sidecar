@@ -16,26 +16,27 @@
  * limitations under the License.
  */
 
-package org.apache.cassandra.sidecar.common.server;
+package org.apache.cassandra.sidecar.adapters.base.data;
 
-import org.apache.cassandra.sidecar.common.response.ConnectedClientStatsResponse;
-import org.apache.cassandra.sidecar.common.response.data.StreamsProgressStats;
+import javax.management.openmbean.CompositeData;
 
 /**
- * An interface that defines interactions with the metrics system in Cassandra.
+ * Representation of the stream summary data
  */
-public interface MetricsOperations
+public class StreamSummary
 {
-    /**
-     * Retrieve the connected client stats metrics from the cluster
-     * @param summaryOnly boolean parameter to list connection summary only
-     * @return the requested client stats, in full or summary
-     */
-    ConnectedClientStatsResponse connectedClientStats(boolean summaryOnly);
+    public final String tableId;
 
     /**
-     * Retrieve the stream progress stats from the cluster
-     * @return the requested stream progress stats
+     * Number of files to transfer. Can be 0 if nothing to transfer for some streaming request.
      */
-    StreamsProgressStats streamsProgressStats();
+    public final int files;
+    public final long totalSize;
+
+    public StreamSummary(CompositeData data)
+    {
+        this.tableId = (String) data.get("tableId");
+        this.files = (int) data.get("files");
+        this.totalSize = (long) data.get("totalSize");
+    }
 }

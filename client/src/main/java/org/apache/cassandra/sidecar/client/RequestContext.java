@@ -47,6 +47,7 @@ import org.apache.cassandra.sidecar.common.request.RingRequest;
 import org.apache.cassandra.sidecar.common.request.SSTableComponentRequest;
 import org.apache.cassandra.sidecar.common.request.SchemaRequest;
 import org.apache.cassandra.sidecar.common.request.SidecarHealthRequest;
+import org.apache.cassandra.sidecar.common.request.StreamStatsRequest;
 import org.apache.cassandra.sidecar.common.request.TimeSkewRequest;
 import org.apache.cassandra.sidecar.common.request.TokenRangeReplicasRequest;
 import org.apache.cassandra.sidecar.common.request.UploadSSTableRequest;
@@ -79,6 +80,8 @@ public class RequestContext
     protected static final GossipInfoRequest GOSSIP_INFO_REQUEST = new GossipInfoRequest();
     protected static final ListOperationalJobsRequest LIST_JOBS_REQUEST = new ListOperationalJobsRequest();
     protected static final NodeDecommissionRequest NODE_DECOMMISSION_REQUEST = new NodeDecommissionRequest();
+
+    protected static final StreamStatsRequest STREAM_STATS_REQUEST = new StreamStatsRequest();
     protected static final RetryPolicy DEFAULT_RETRY_POLICY = new NoRetryPolicy();
     protected static final RetryPolicy DEFAULT_EXPONENTIAL_BACKOFF_RETRY_POLICY =
     new ExponentialBackoffRetryPolicy(10, 500L, 60_000L);
@@ -535,6 +538,17 @@ public class RequestContext
         public Builder nodeDecommissionRequest()
         {
             return request(NODE_DECOMMISSION_REQUEST);
+        }
+
+        /**
+         * Sets the {@code request} to be a {@link StreamStatsRequest} and returns a reference to this Builder
+         * enabling method chaining.
+         *
+         * @return a reference to this Builder
+         */
+        public Builder streamsStatsRequest()
+        {
+            return request(STREAM_STATS_REQUEST);
         }
 
         /**

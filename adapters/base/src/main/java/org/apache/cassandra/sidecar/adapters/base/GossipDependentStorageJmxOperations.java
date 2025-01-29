@@ -146,6 +146,12 @@ public class GossipDependentStorageJmxOperations implements StorageJmxOperations
         return delegate.forceKeyspaceCleanup(jobs, keyspaceName, tables);
     }
 
+    @Override
+    public String getOperationMode()
+    {
+        return delegate.getOperationMode();
+    }
+
     /**
      * Ensures that gossip is running on the Cassandra instance
      *
@@ -164,11 +170,5 @@ public class GossipDependentStorageJmxOperations implements StorageJmxOperations
     public void decommission(boolean force) throws IllegalStateException, IllegalArgumentException, UnsupportedOperationException
     {
         delegate.decommission(force);
-    }
-
-    @Override
-    public String getOperationMode()
-    {
-        return delegate.getOperationMode();
     }
 }

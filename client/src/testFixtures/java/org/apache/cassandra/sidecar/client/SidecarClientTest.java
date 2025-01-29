@@ -80,12 +80,14 @@ import org.apache.cassandra.sidecar.common.response.OperationalJobResponse;
 import org.apache.cassandra.sidecar.common.response.RingResponse;
 import org.apache.cassandra.sidecar.common.response.SSTableImportResponse;
 import org.apache.cassandra.sidecar.common.response.SchemaResponse;
+import org.apache.cassandra.sidecar.common.response.StreamStatsResponse;
 import org.apache.cassandra.sidecar.common.response.TimeSkewResponse;
 import org.apache.cassandra.sidecar.common.response.TokenRangeReplicasResponse;
 import org.apache.cassandra.sidecar.common.response.data.CdcSegmentInfo;
 import org.apache.cassandra.sidecar.common.response.data.ClientConnectionEntry;
 import org.apache.cassandra.sidecar.common.response.data.CreateRestoreJobResponsePayload;
 import org.apache.cassandra.sidecar.common.response.data.RingEntry;
+import org.apache.cassandra.sidecar.common.response.data.StreamsProgressStats;
 import org.apache.cassandra.sidecar.common.utils.HttpRange;
 import org.apache.cassandra.sidecar.foundation.RestoreJobSecretsGen;
 
@@ -1620,6 +1622,26 @@ abstract class SidecarClientTest
             baos.write(bytes, 0, bytes.length);
         }
         assertThat(new String(baos.toByteArray(), StandardCharsets.UTF_8)).isEqualTo("Test Content");
+    }
+
+    @Test
+    public void testStreamsStats() throws Exception
+    {
+        StreamsProgressStats stats = new StreamsProgressStats(7, 7, 15088, 15088, 2, 2, 1024, 1024);
+        StreamStatsResponse mockResp = new StreamStatsResponse("NORMAL", stats);
+        ObjectMapper mapper = new ObjectMapper();
+        String expectedResponse = mapper.writeValueAsString(mockResp);
+        MockResponse response = new MockResponse()
+                                .setResponseCode(OK.code())
+                                .setBody(expectedResponse);
+        enqueue(response);
+        for (MockWebServer server : servers)
+        {
+            SidecarInstanceImpl sidecarInstance = RequestExecutorTest.newSidecarInstance(server);
+            StreamStatsResponse result = client.streamsStats(sidecarInstance).get(30, TimeUnit.SECONDS);
+            assertThat(mapper.writeValueAsString(result)).isEqualTo(expectedResponse);
+            validateResponseServed(server, ApiEndpointsV1.STREAM_STATS_ROUTE, req -> { });
+        }
     }
 
     private void enqueue(MockResponse response)

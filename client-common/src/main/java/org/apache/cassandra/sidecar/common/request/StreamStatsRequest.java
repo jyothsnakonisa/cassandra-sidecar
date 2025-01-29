@@ -16,26 +16,30 @@
  * limitations under the License.
  */
 
-package org.apache.cassandra.sidecar.common.server;
+package org.apache.cassandra.sidecar.common.request;
 
-import org.apache.cassandra.sidecar.common.response.ConnectedClientStatsResponse;
-import org.apache.cassandra.sidecar.common.response.data.StreamsProgressStats;
+import io.netty.handler.codec.http.HttpMethod;
+import org.apache.cassandra.sidecar.common.ApiEndpointsV1;
+import org.apache.cassandra.sidecar.common.response.StreamStatsResponse;
 
 /**
- * An interface that defines interactions with the metrics system in Cassandra.
+ * Class response for the StreamsStats API
  */
-public interface MetricsOperations
+public class StreamStatsRequest extends JsonRequest<StreamStatsResponse>
 {
     /**
-     * Retrieve the connected client stats metrics from the cluster
-     * @param summaryOnly boolean parameter to list connection summary only
-     * @return the requested client stats, in full or summary
+     * Constructs a request to retrieve the Cassandra node streaming stats information
      */
-    ConnectedClientStatsResponse connectedClientStats(boolean summaryOnly);
+    public StreamStatsRequest()
+    {
+        super(ApiEndpointsV1.STREAM_STATS_ROUTE);
+    }
 
     /**
-     * Retrieve the stream progress stats from the cluster
-     * @return the requested stream progress stats
+     * {@inheritDoc}
      */
-    StreamsProgressStats streamsProgressStats();
+    public HttpMethod method()
+    {
+        return HttpMethod.GET;
+    }
 }

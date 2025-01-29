@@ -16,26 +16,35 @@
  * limitations under the License.
  */
 
-package org.apache.cassandra.sidecar.common.server;
+package org.apache.cassandra.sidecar.adapters.base.data;
 
-import org.apache.cassandra.sidecar.common.response.ConnectedClientStatsResponse;
-import org.apache.cassandra.sidecar.common.response.data.StreamsProgressStats;
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
+import javax.management.openmbean.CompositeData;
 
 /**
- * An interface that defines interactions with the metrics system in Cassandra.
+ * Representation of the stream state data
  */
-public interface MetricsOperations
+public class StreamState
 {
-    /**
-     * Retrieve the connected client stats metrics from the cluster
-     * @param summaryOnly boolean parameter to list connection summary only
-     * @return the requested client stats, in full or summary
-     */
-    ConnectedClientStatsResponse connectedClientStats(boolean summaryOnly);
+    private final List<SessionInfo> sessions;
+
+    public StreamState(CompositeData data)
+    {
+        this.sessions = parseSessions((CompositeData[]) data.get("sessions"));
+    }
 
     /**
-     * Retrieve the stream progress stats from the cluster
-     * @return the requested stream progress stats
+     * @return the session info for the sessions in the stream stats data
      */
-    StreamsProgressStats streamsProgressStats();
+    public List<SessionInfo> sessions()
+    {
+        return sessions;
+    }
+
+    private List<SessionInfo> parseSessions(CompositeData[] sessions)
+    {
+        return Arrays.stream(sessions).map(SessionInfo::new).collect(Collectors.toList());
+    }
 }
