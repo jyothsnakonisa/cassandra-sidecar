@@ -21,80 +21,63 @@ package org.apache.cassandra.sidecar.config.yaml;
 import java.util.Collections;
 import java.util.List;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.apache.cassandra.sidecar.config.InstanceConfiguration;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * Encapsulates the basic configuration needed to connect to a single Cassandra instance
  */
 public class InstanceConfigurationImpl implements InstanceConfiguration
 {
-    @JsonProperty("id")
     protected final int id;
-
-    @JsonProperty("host")
     protected final String host;
-
-    @JsonProperty("port")
     protected final int port;
-
-    @JsonProperty("data_dirs")
+    protected final String storageDir;
     protected final List<String> dataDirs;
-
-    @JsonProperty("staging_dir")
     protected final String stagingDir;
-
-    @JsonProperty("cdc_dir")
     protected final String cdcDir;
-
-    @JsonProperty("jmx_host")
+    protected final String commitlogDir;
+    protected final String hintsDir;
+    protected final String savedCachesDir;
+    protected final String localSystemDataFileDir;
     protected final String jmxHost;
-
-    @JsonProperty("jmx_port")
     protected final int jmxPort;
-
-    @JsonProperty("jmx_ssl_enabled")
     protected final boolean jmxSslEnabled;
-
-    @JsonProperty("jmx_role")
     protected final String jmxRole;
-
-    @JsonProperty("jmx_role_password")
     protected final String jmxRolePassword;
 
-    public InstanceConfigurationImpl()
-    {
-        this.id = 0;
-        this.host = null;
-        this.port = 9042;
-        this.dataDirs = null;
-        this.stagingDir = null;
-        this.cdcDir = null;
-        this.jmxHost = null;
-        this.jmxPort = 0;
-        this.jmxSslEnabled = false;
-        this.jmxRole = null;
-        this.jmxRolePassword = null;
-    }
-
-    public InstanceConfigurationImpl(int id,
-                                     String host,
-                                     int port,
-                                     List<String> dataDirs,
-                                     String stagingDir,
-                                     String cdcDir,
-                                     String jmxHost,
-                                     int jmxPort,
-                                     boolean jmxSslEnabled,
-                                     String jmxRole,
-                                     String jmxRolePassword)
+    @JsonCreator
+    public InstanceConfigurationImpl(@JsonProperty("id") int id,
+                                     @NotNull @JsonProperty("host") String host,
+                                     @JsonProperty("port") int port,
+                                     @Nullable @JsonProperty("storage_dir") String storageDir,
+                                     @Nullable @JsonProperty("data_dirs") List<String> dataDirs,
+                                     @NotNull @JsonProperty("staging_dir") String stagingDir,
+                                     @Nullable @JsonProperty("cdc_dir") String cdcDir,
+                                     @Nullable @JsonProperty("commitlog_dir") String commitlogDir,
+                                     @Nullable @JsonProperty("hints_dir") String hintsDir,
+                                     @Nullable @JsonProperty("saved_caches_dir") String savedCachesDir,
+                                     @Nullable @JsonProperty("local_system_data_file_dir") String localSystemDataFileDir,
+                                     @NotNull @JsonProperty("jmx_host") String jmxHost,
+                                     @JsonProperty("jmx_port") int jmxPort,
+                                     @JsonProperty("jmx_ssl_enabled") boolean jmxSslEnabled,
+                                     @Nullable @JsonProperty("jmx_role") String jmxRole,
+                                     @Nullable @JsonProperty("jmx_role_password") String jmxRolePassword)
     {
         this.id = id;
         this.host = host;
         this.port = port;
-        this.dataDirs = Collections.unmodifiableList(dataDirs);
+        this.storageDir = storageDir;
+        this.dataDirs = dataDirs != null ? Collections.unmodifiableList(dataDirs) : null;
         this.stagingDir = stagingDir;
         this.cdcDir = cdcDir;
+        this.commitlogDir = commitlogDir;
+        this.hintsDir = hintsDir;
+        this.savedCachesDir = savedCachesDir;
+        this.localSystemDataFileDir = localSystemDataFileDir;
         this.jmxHost = jmxHost;
         this.jmxPort = jmxPort;
         this.jmxSslEnabled = jmxSslEnabled;
@@ -132,6 +115,13 @@ public class InstanceConfigurationImpl implements InstanceConfiguration
         return port;
     }
 
+    @Override
+    @JsonProperty("storage_dir")
+    public String storageDir()
+    {
+        return storageDir;
+    }
+
     /**
      * @return a list of data directories of cassandra instance
      */
@@ -150,6 +140,46 @@ public class InstanceConfigurationImpl implements InstanceConfiguration
     public String stagingDir()
     {
         return stagingDir;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    @JsonProperty("commitlog_dir")
+    public String commitlogDir()
+    {
+        return commitlogDir;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    @JsonProperty("hints_dir")
+    public String hintsDir()
+    {
+        return hintsDir;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    @JsonProperty("saved_caches_dir")
+    public String savedCachesDir()
+    {
+        return savedCachesDir;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    @JsonProperty("local_system_data_file_dir")
+    public String localSystemDataFileDir()
+    {
+        return localSystemDataFileDir;
     }
 
     /**

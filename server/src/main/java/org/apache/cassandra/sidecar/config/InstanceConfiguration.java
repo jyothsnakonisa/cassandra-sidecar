@@ -41,6 +41,11 @@ public interface InstanceConfiguration
     int port();
 
     /**
+     * @return storage directory of Cassandra instance
+     */
+    String storageDir();
+
+    /**
      * @return a list of data directories of cassandra instance
      */
     List<String> dataDirs();
@@ -49,6 +54,26 @@ public interface InstanceConfiguration
      * @return staging directory for the uploads of the cassandra instance
      */
     String stagingDir();
+
+    /**
+     * @return commitlog directory of cassandra instance
+     */
+    String commitlogDir();
+
+    /**
+     * @return hints directory of cassandra instance
+     */
+    String hintsDir();
+
+    /**
+     * @return saved caches directory of cassandra instance
+     */
+    String savedCachesDir();
+
+    /**
+     * @return local system data file directory of cassandra instance
+     */
+    String localSystemDataFileDir();
 
     /**
      * @return cdc directory of the cassandra instance

@@ -187,6 +187,7 @@ class MostReplicatedKeyspaceTokenZeroElectorateMembershipIntegrationTest
         int nativeTransportPort = tryGetIntConfig(config, "native_transport_port", 9042);
         String[] dataDirectories = (String[]) config.get("data_file_directories");
 
+
         JmxClient jmxClient = JmxClient.builder()
                                        .host(hostName)
                                        .port(config.jmxPort())
@@ -216,6 +217,10 @@ class MostReplicatedKeyspaceTokenZeroElectorateMembershipIntegrationTest
                                                       .host(config.broadcastAddress().getAddress().getHostAddress())
                                                       .port(nativeTransportPort)
                                                       .dataDirs(Arrays.asList(dataDirectories))
+                                                      .cdcDir(config.getString("cdc_raw_directory"))
+                                                      .commitlogDir(config.getString("commitlog_directory"))
+                                                      .hintsDir(config.getString("hints_directory"))
+                                                      .savedCachesDir(config.getString("saved_caches_directory"))
                                                       .delegate(delegate)
                                                       .metricRegistry(instanceSpecificRegistry)
                                                       .build());

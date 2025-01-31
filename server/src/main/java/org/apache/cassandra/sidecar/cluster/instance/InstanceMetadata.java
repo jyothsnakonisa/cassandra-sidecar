@@ -24,6 +24,7 @@ import org.apache.cassandra.sidecar.cluster.CassandraAdapterDelegate;
 import org.apache.cassandra.sidecar.exceptions.CassandraUnavailableException;
 import org.apache.cassandra.sidecar.metrics.instance.InstanceMetrics;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * Metadata of an instance
@@ -48,6 +49,7 @@ public interface InstanceMetadata
     /**
      * @return a list of data directories of cassandra instance
      */
+    @NotNull
     List<String> dataDirs();
 
     /**
@@ -56,18 +58,47 @@ public interface InstanceMetadata
     String stagingDir();
 
     /**
-     * @return cdc directory of the cassandra instance
-     */
-    String cdcDir();
-
-    /**
      * @return a {@link CassandraAdapterDelegate} specific for the instance, or throws when the delegate is unavailable
      * @throws CassandraUnavailableException when the Cassandra service is unavailable
      */
-    @NotNull CassandraAdapterDelegate delegate() throws CassandraUnavailableException;
+    @NotNull
+    CassandraAdapterDelegate delegate() throws CassandraUnavailableException;
+
+    /**
+     * @return CDC directory of the cassandra instance, it can be configured as null when CDC is not enabled
+     * for the Cassandra.
+     * instance
+     */
+    @Nullable
+    String cdcDir();
+
+    /**
+     * @return commitlog directory of the cassandra instance
+     */
+    @NotNull
+    String commitlogDir();
+
+    /**
+     * @return hints directory of the Cassandra instance
+     */
+    @NotNull
+    String hintsDir();
+
+    /**
+     * @return saved caches directory of the Cassandra instance
+     */
+    @NotNull
+    String savedCachesDir();
+
+    /**
+     * @return local system data file directory of the cassandra instance
+     */
+    @Nullable
+    String localSystemDataFileDir();
 
     /**
      * @return {@link InstanceMetrics} metrics specific for the Cassandra instance
      */
-    @NotNull InstanceMetrics metrics();
+    @NotNull
+    InstanceMetrics metrics();
 }
