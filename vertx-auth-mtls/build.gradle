@@ -28,7 +28,7 @@ plugins {
 group 'org.apache.cassandra.sidecar'
 version project.version
 
-sourceCompatibility = 1.8
+sourceCompatibility = JavaVersion.VERSION_11
 
 test {
     useJUnitPlatform()
