@@ -19,6 +19,7 @@
 package org.apache.cassandra.sidecar.cluster.instance;
 
 import java.io.File;
+import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -28,6 +29,7 @@ import java.util.stream.Collectors;
 import com.codahale.metrics.MetricRegistry;
 import org.apache.cassandra.sidecar.cluster.CassandraAdapterDelegate;
 import org.apache.cassandra.sidecar.common.DataObjectBuilder;
+import org.apache.cassandra.sidecar.common.server.dns.DnsResolver;
 import org.apache.cassandra.sidecar.common.utils.Preconditions;
 import org.apache.cassandra.sidecar.exceptions.CassandraUnavailableException;
 import org.apache.cassandra.sidecar.exceptions.ConfigurationException;
@@ -63,11 +65,15 @@ public class InstanceMetadataImpl implements InstanceMetadata
     @Nullable
     private final CassandraAdapterDelegate delegate;
     private final InstanceMetrics metrics;
+    private final DnsResolver dnsResolver;
+    private volatile String ipAddress;
 
     protected InstanceMetadataImpl(Builder builder)
     {
         id = builder.id;
         host = builder.host;
+        dnsResolver = builder.dnsResolver;
+        ipAddress = builder.ipAddress;
         port = builder.port;
         delegate = builder.delegate;
         metrics = builder.metrics;
@@ -94,6 +100,20 @@ public class InstanceMetadataImpl implements InstanceMetadata
     public String host()
     {
         return host;
+    }
+
+    @Nullable
+    @Override
+    public String ipAddress()
+    {
+        return ipAddress;
+    }
+
+    @Override
+    public String refreshIpAddress() throws UnknownHostException
+    {
+        this.ipAddress = dnsResolver.resolve(host);
+        return ipAddress;
     }
 
     @Override
@@ -187,8 +207,10 @@ public class InstanceMetadataImpl implements InstanceMetadata
      */
     public static class Builder implements DataObjectBuilder<Builder, InstanceMetadataImpl>
     {
+        protected DnsResolver dnsResolver;
         protected Integer id;
         protected String host;
+        protected String ipAddress;
         protected int port;
         protected String storageDir;
         protected List<String> dataDirs;
@@ -210,6 +232,7 @@ public class InstanceMetadataImpl implements InstanceMetadata
         {
             id = instanceMetadata.id;
             host = instanceMetadata.host;
+            ipAddress = instanceMetadata.ipAddress;
             port = instanceMetadata.port;
             dataDirs = new ArrayList<>(instanceMetadata.dataDirs);
             stagingDir = instanceMetadata.stagingDir;
@@ -240,14 +263,30 @@ public class InstanceMetadataImpl implements InstanceMetadata
         }
 
         /**
-         * Sets the {@code host} and returns a reference to this Builder enabling method chaining.
+         * Sets the {@code host} and the {@code ipAddress} resolved by {@link DnsResolver#DEFAULT}
+         * and returns a reference to this Builder enabling method chaining.
          *
          * @param host the {@code host} to set
          * @return a reference to this Builder
          */
         public Builder host(String host)
         {
-            return update(b -> b.host = host);
+            return host(host, DnsResolver.DEFAULT);
+        }
+
+        /**
+         * Sets the {@code host} and the {@code ipAddress} resolved by dnsResolver
+         * and returns a reference to this Builder enabling method chaining.
+         *
+         * @param host the {@code host} to set
+         * @return a reference to this Builder
+         */
+        public Builder host(String host, DnsResolver dnsResolver)
+        {
+            return update(b -> {
+                b.host = host;
+                b.dnsResolver = dnsResolver;
+            });
         }
 
         /**
