@@ -107,7 +107,15 @@ public class ClusterLeaseClaimTask implements PeriodicTask
         {
             // Do expensive call when the feature is enabled to determine if this Sidecar is member
             // of the electorate
-            isMember = electorateMembership.isMember();
+            try
+            {
+                isMember = electorateMembership.isMember();
+            }
+            catch (Throwable t)
+            {
+                LOGGER.debug("Membership determination fails due to unexpected exception", t);
+                // isMember remains false
+            }
             LOGGER.debug("Sidecar instance part of electorate isMember={}", isMember);
         }
         if (!isEnabled || !isMember)
@@ -115,7 +123,10 @@ public class ClusterLeaseClaimTask implements PeriodicTask
             clusterLease.setOwnership(ClusterLease.Ownership.LOST);
             return ScheduleDecision.SKIP;
         }
-        return ScheduleDecision.EXECUTE;
+
+        // When accessor is available, it permits execution (where accessor is used)
+        // Otherwise, it reschedules to skip the run and retry sooner, assuming initial delay is less than delay
+        return accessor.isAvailable() ? ScheduleDecision.EXECUTE : ScheduleDecision.RESCHEDULE;
     }
 
     /**

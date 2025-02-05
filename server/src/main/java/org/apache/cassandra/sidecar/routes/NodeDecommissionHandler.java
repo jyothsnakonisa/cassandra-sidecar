@@ -41,6 +41,7 @@ import org.apache.cassandra.sidecar.job.OperationalJobManager;
 import org.apache.cassandra.sidecar.utils.CassandraInputValidator;
 import org.apache.cassandra.sidecar.utils.InstanceMetadataFetcher;
 import org.apache.cassandra.sidecar.utils.OperationalJobUtils;
+import org.jetbrains.annotations.NotNull;
 
 import static org.apache.cassandra.sidecar.utils.RequestUtils.parseBooleanQueryParam;
 
@@ -84,7 +85,7 @@ public class NodeDecommissionHandler extends AbstractHandler<Boolean> implements
     @Override
     public void handleInternal(RoutingContext context,
                                HttpServerRequest httpRequest,
-                               String host,
+                               @NotNull String host,
                                SocketAddress remoteAddress,
                                Boolean isForce)
     {

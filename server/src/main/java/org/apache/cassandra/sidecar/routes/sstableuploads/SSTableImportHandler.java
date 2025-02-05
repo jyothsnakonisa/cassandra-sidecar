@@ -47,6 +47,7 @@ import org.apache.cassandra.sidecar.utils.CassandraInputValidator;
 import org.apache.cassandra.sidecar.utils.InstanceMetadataFetcher;
 import org.apache.cassandra.sidecar.utils.SSTableImporter;
 import org.apache.cassandra.sidecar.utils.SSTableUploadsPathBuilder;
+import org.jetbrains.annotations.NotNull;
 
 import static org.apache.cassandra.sidecar.utils.HttpExceptions.wrapHttpException;
 
@@ -101,7 +102,7 @@ public class SSTableImportHandler extends AbstractHandler<SSTableImportRequestPa
     @Override
     public void handleInternal(RoutingContext context,
                                HttpServerRequest httpRequest,
-                               String host,
+                               @NotNull String host,
                                SocketAddress remoteAddress,
                                SSTableImportRequestParam request)
     {

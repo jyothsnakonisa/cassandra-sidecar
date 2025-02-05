@@ -40,6 +40,7 @@ import org.apache.cassandra.sidecar.routes.AccessProtected;
 import org.apache.cassandra.sidecar.routes.data.SnapshotRequestParam;
 import org.apache.cassandra.sidecar.utils.CassandraInputValidator;
 import org.apache.cassandra.sidecar.utils.InstanceMetadataFetcher;
+import org.jetbrains.annotations.NotNull;
 
 import static org.apache.cassandra.sidecar.utils.HttpExceptions.wrapHttpException;
 
@@ -77,7 +78,7 @@ public class ClearSnapshotHandler extends AbstractHandler<SnapshotRequestParam> 
     @Override
     public void handleInternal(RoutingContext context,
                                HttpServerRequest httpRequest,
-                               String host,
+                               @NotNull String host,
                                SocketAddress remoteAddress,
                                SnapshotRequestParam requestParams)
     {

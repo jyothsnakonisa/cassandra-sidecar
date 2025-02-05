@@ -40,6 +40,7 @@ import org.apache.cassandra.sidecar.concurrent.ExecutorPools;
 import org.apache.cassandra.sidecar.utils.CassandraInputValidator;
 import org.apache.cassandra.sidecar.utils.HttpExceptions;
 import org.apache.cassandra.sidecar.utils.InstanceMetadataFetcher;
+import org.jetbrains.annotations.NotNull;
 
 import static org.apache.cassandra.sidecar.utils.HttpExceptions.wrapHttpException;
 
@@ -77,7 +78,7 @@ public class TokenRangeReplicaMapHandler extends AbstractHandler<Name> implement
     @Override
     public void handleInternal(RoutingContext context,
                                HttpServerRequest httpRequest,
-                               String host,
+                               @NotNull String host,
                                SocketAddress remoteAddress,
                                Name keyspace)
     {
