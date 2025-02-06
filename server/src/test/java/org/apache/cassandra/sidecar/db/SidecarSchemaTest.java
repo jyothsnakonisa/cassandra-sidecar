@@ -114,7 +114,7 @@ public class SidecarSchemaTest
     @Test
     void testSchemaInitOnStartup(VertxTestContext context)
     {
-        sidecarSchema.startSidecarSchemaInitializer();
+        sidecarSchema.maybeStartSidecarSchemaInitializer();
         context.verify(() -> {
             int maxWaitTime = 20; // about 10 seconds
             while (interceptedPrepStmts.size() < 10
@@ -258,6 +258,7 @@ public class SidecarSchemaTest
                 return ps;
             });
             when(cqlSession.get()).thenReturn(session);
+            when(cqlSession.getIfConnected()).thenReturn(session);
             return cqlSession;
         }
 
