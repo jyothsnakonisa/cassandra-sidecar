@@ -24,6 +24,7 @@ import io.vertx.ext.auth.authorization.Authorization;
 import io.vertx.ext.auth.authorization.WildcardPermissionBasedAuthorization;
 import io.vertx.ext.auth.authorization.impl.WildcardPermissionBasedAuthorizationImpl;
 
+import static org.apache.cassandra.sidecar.acl.authorization.ResourceScopes.NO_SCOPE;
 import static org.apache.cassandra.sidecar.common.utils.StringUtils.isNotEmpty;
 
 /**
@@ -45,7 +46,18 @@ public class DomainAwarePermission extends StandardPermission
 
     public DomainAwarePermission(String name)
     {
-        super(name);
+        this(name, NO_SCOPE);
+    }
+
+    /**
+     * Creates an instance of {@link DomainAwarePermission} with given permission name and resource scope.
+     *
+     * @param name      permission name
+     * @param scope     resource scope for permission
+     */
+    public DomainAwarePermission(String name, ResourceScope scope)
+    {
+        super(name, scope);
         validate(name);
     }
 
@@ -75,7 +87,7 @@ public class DomainAwarePermission extends StandardPermission
         WildcardPermissionBasedAuthorization authorization = new WildcardPermissionBasedAuthorizationImpl(name);
         if (isNotEmpty(resource))
         {
-            authorization.setResource(resource);
+            authorization.setResource(resourceScope.resolveWithResource(resource));
         }
         return authorization;
     }

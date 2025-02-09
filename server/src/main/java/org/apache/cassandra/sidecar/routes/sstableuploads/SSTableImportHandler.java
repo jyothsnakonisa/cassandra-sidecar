@@ -19,10 +19,7 @@
 package org.apache.cassandra.sidecar.routes.sstableuploads;
 
 import java.nio.file.NoSuchFileException;
-import java.util.List;
 import java.util.Set;
-
-import com.google.common.collect.ImmutableSet;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.google.inject.Inject;
@@ -35,7 +32,6 @@ import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.HttpException;
 import org.apache.cassandra.sidecar.acl.authorization.BasicPermissions;
 import org.apache.cassandra.sidecar.acl.authorization.CassandraPermissions;
-import org.apache.cassandra.sidecar.acl.authorization.VariableAwareResource;
 import org.apache.cassandra.sidecar.common.response.SSTableImportResponse;
 import org.apache.cassandra.sidecar.concurrent.ExecutorPools;
 import org.apache.cassandra.sidecar.exceptions.CassandraUnavailableException;
@@ -49,6 +45,7 @@ import org.apache.cassandra.sidecar.utils.SSTableImporter;
 import org.apache.cassandra.sidecar.utils.SSTableUploadsPathBuilder;
 import org.jetbrains.annotations.NotNull;
 
+import static org.apache.cassandra.sidecar.acl.authorization.ResourceScopes.TABLE_SCOPE;
 import static org.apache.cassandra.sidecar.utils.HttpExceptions.wrapHttpException;
 
 /**
@@ -88,10 +85,10 @@ public class SSTableImportHandler extends AbstractHandler<SSTableImportRequestPa
     @Override
     public Set<Authorization> requiredAuthorizations()
     {
-        List<String> eligibleResources = VariableAwareResource.DATA_WITH_KEYSPACE_TABLE.expandedResources();
+        Set<String> eligibleResources = TABLE_SCOPE.expandedResources();
         Authorization modifyAuthorization = CassandraPermissions.MODIFY.toAuthorization(eligibleResources);
-        Authorization importAuthorization = BasicPermissions.IMPORT_STAGED_SSTABLE.toAuthorization(eligibleResources);
-        return ImmutableSet.of(modifyAuthorization, importAuthorization);
+        Authorization importAuthorization = BasicPermissions.IMPORT_STAGED_SSTABLE.toAuthorization();
+        return Set.of(modifyAuthorization, importAuthorization);
     }
 
     /**

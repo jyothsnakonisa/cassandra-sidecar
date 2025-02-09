@@ -22,7 +22,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 import com.datastax.driver.core.BoundStatement;
 import com.datastax.driver.core.ResultSet;
@@ -30,10 +29,9 @@ import com.datastax.driver.core.Row;
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
 import io.vertx.ext.auth.authorization.Authorization;
+import org.apache.cassandra.sidecar.acl.authorization.PermissionFactory;
 import org.apache.cassandra.sidecar.common.server.CQLSessionProvider;
 import org.apache.cassandra.sidecar.db.schema.SystemAuthSchema;
-
-import static org.apache.cassandra.sidecar.utils.AuthUtils.permissionFromName;
 
 /**
  * Database Accessor that queries cassandra to get information maintained under system_auth keyspace.
@@ -41,11 +39,15 @@ import static org.apache.cassandra.sidecar.utils.AuthUtils.permissionFromName;
 @Singleton
 public class SystemAuthDatabaseAccessor extends DatabaseAccessor<SystemAuthSchema>
 {
+    private final PermissionFactory permissionFactory;
+
     @Inject
     public SystemAuthDatabaseAccessor(SystemAuthSchema systemAuthSchema,
-                                      CQLSessionProvider sessionProvider)
+                                      CQLSessionProvider sessionProvider,
+                                      PermissionFactory permissionFactory)
     {
         super(systemAuthSchema, sessionProvider);
+        this.permissionFactory = permissionFactory;
     }
 
     /**
@@ -94,10 +96,20 @@ public class SystemAuthDatabaseAccessor extends DatabaseAccessor<SystemAuthSchem
         {
             String role = row.getString("role");
             String resource = row.getString("resource");
-            Set<Authorization> authorizations = row.getSet("permissions", String.class)
-                                                   .stream()
-                                                   .map(permission -> permissionFromName(permission).toAuthorization(resource))
-                                                   .collect(Collectors.toSet());
+            Set<String> permissions = row.getSet("permissions", String.class);
+            Set<Authorization> authorizations = new HashSet<>();
+            for (String permission : permissions)
+            {
+                try
+                {
+                    authorizations.add(permissionFactory.createPermission(permission).toAuthorization(resource));
+                }
+                catch (Exception e)
+                {
+                    logger.error("Error parsing Cassandra permission={} resource={} role={}",
+                                 permission, resource, role, e);
+                }
+            }
             roleAuthorizations.computeIfAbsent(role, k -> new HashSet<>()).addAll(authorizations);
         }
         return roleAuthorizations;

@@ -27,6 +27,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 import org.slf4j.Logger;
@@ -40,7 +41,6 @@ import io.vertx.core.net.SocketAddress;
 import io.vertx.ext.auth.authorization.Authorization;
 import io.vertx.ext.web.RoutingContext;
 import org.apache.cassandra.sidecar.acl.authorization.BasicPermissions;
-import org.apache.cassandra.sidecar.acl.authorization.VariableAwareResource;
 import org.apache.cassandra.sidecar.common.response.ListCdcSegmentsResponse;
 import org.apache.cassandra.sidecar.common.response.data.CdcSegmentInfo;
 import org.apache.cassandra.sidecar.concurrent.ExecutorPools;
@@ -54,10 +54,12 @@ import org.apache.cassandra.sidecar.utils.CdcUtil;
 import org.apache.cassandra.sidecar.utils.InstanceMetadataFetcher;
 import org.jetbrains.annotations.NotNull;
 
+import static org.apache.cassandra.sidecar.common.utils.StringUtils.isNullOrEmpty;
 import static org.apache.cassandra.sidecar.utils.CdcUtil.getIdxFileName;
 import static org.apache.cassandra.sidecar.utils.CdcUtil.getLogFilePrefix;
 import static org.apache.cassandra.sidecar.utils.CdcUtil.isIndexFile;
 import static org.apache.cassandra.sidecar.utils.CdcUtil.parseIndexFile;
+import static org.apache.cassandra.sidecar.utils.HttpExceptions.wrapHttpException;
 
 /**
  * Provides REST endpoint for listing commit logs in CDC directory.
@@ -83,8 +85,7 @@ public class ListCdcDirHandler extends AbstractHandler<Void> implements AccessPr
     @Override
     public Set<Authorization> requiredAuthorizations()
     {
-        String resource = VariableAwareResource.CLUSTER.resource();
-        return Collections.singleton(BasicPermissions.CDC.toAuthorization(resource));
+        return Collections.singleton(BasicPermissions.CDC.toAuthorization());
     }
 
     @Override
@@ -95,6 +96,11 @@ public class ListCdcDirHandler extends AbstractHandler<Void> implements AccessPr
                                   Void request)
     {
         String cdcDir = metadataFetcher.instance(host).cdcDir();
+        if (isNullOrEmpty(cdcDir))
+        {
+            throw wrapHttpException(HttpResponseStatus.SERVICE_UNAVAILABLE,
+                                    "CDC directory is not configured in Sidecar");
+        }
         serviceExecutorPool
         .executeBlocking(() -> collectCdcSegmentsFromFileSystem(cdcDir))
         .map(segments -> new ListCdcSegmentsResponse(config.host(), config.port(), segments))
@@ -103,7 +109,7 @@ public class ListCdcDirHandler extends AbstractHandler<Void> implements AccessPr
             LOGGER.warn("Error listing the CDC commit log segments", cause);
             context.response()
                    .setStatusCode(HttpResponseStatus.INTERNAL_SERVER_ERROR.code())
-                   .setStatusMessage(cause.getMessage())
+                   .setStatusMessage(Objects.requireNonNullElse(cause.getMessage(), "Error while listing CDC segments"))
                    .end();
         });
     }

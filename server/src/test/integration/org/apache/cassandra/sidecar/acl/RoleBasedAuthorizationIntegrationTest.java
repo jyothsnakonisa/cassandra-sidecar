@@ -49,7 +49,9 @@ import static org.assertj.core.api.Assumptions.assumeThat;
 
 /**
  * Test for role based access control in Sidecar
- * Note: Do not add new test cases in this class. Add them into test method, example refer to testForAdmin
+ * Note:
+ * - Do not add new test cases in this class. Add them into test method, example refer to testForAdmin.
+ * - Create a new keyspace or test role for each test method as required to prevent permissions overlapping
  */
 @ExtendWith(VertxExtension.class)
 class RoleBasedAuthorizationIntegrationTest extends IntegrationTestBase
@@ -67,7 +69,7 @@ class RoleBasedAuthorizationIntegrationTest extends IntegrationTestBase
         // wait for cache refreshes
         Thread.sleep(3000);
 
-        testCompleteLatch = new CountDownLatch(16);
+        testCompleteLatch = new CountDownLatch(32);
 
         // permissions for test cases below are granted during prepareForTest to save cache refresh time. Please
         // refer to grantRequiredPermissions to check permissions granted for a test to understand verifications done in
@@ -81,6 +83,13 @@ class RoleBasedAuthorizationIntegrationTest extends IntegrationTestBase
         testGrantingAtDataLevel(context);
         testGrantingWithWildcardSubparts(context);
         testEndpointRequiringMultipleActions(context);
+        testGrantingBulkReadFeaturePermission(context);
+        testGrantingBulkReadFeaturePermissionAcrossTables(context);
+        testGrantingBulkReadFeaturePermissionAcrossData(context);
+        testGrantingBulkWriteFeaturePermission(context);
+        testGrantingBothBulkReadAndWriteFeaturePermission(context);
+        testGrantingAllAnalyticsRelatedPermissions(context);
+        testGrantingCdcFeaturePermission(context);
 
         assertThat(testCompleteLatch.await(4, TimeUnit.MINUTES)).isTrue();
         context.completeNow();
@@ -243,6 +252,131 @@ class RoleBasedAuthorizationIntegrationTest extends IntegrationTestBase
         .onFailure(context::failNow);
     }
 
+    void testGrantingBulkReadFeaturePermission(VertxTestContext context) throws Exception
+    {
+        Path clientKeystorePath = clientKeystorePath("spiffe://cassandra/sidecar/bulk_read_test_user");
+
+        String createSnapshotRoute = String.format("/api/v1/keyspaces/%s/tables/%s/snapshots/my-snapshot",
+                                                   "grant_bulk_read_test_keyspace", "test_table");
+
+        // SNAPSHOT:CREATE permission granted for data/grant_bulk_read_test_keyspace/test_table with ANALYTICS:READ_DIRECT
+        verifyAccess(context, testCompleteLatch, HttpMethod.PUT, createSnapshotRoute, clientKeystorePath, false);
+
+        String keyspaceSchemaRoute = String.format("/api/v1/keyspaces/%s/schema", "grant_bulk_read_test_keyspace");
+
+        // SCHEMA:READ permission granted for data/grant_bulk_read_test_keyspace/test_table with ANALYTICS:READ_DIRECT
+        verifyAccess(context, testCompleteLatch, HttpMethod.GET, keyspaceSchemaRoute, clientKeystorePath, false);
+
+        String topologyRoute = String.format("/api/v1/keyspaces/%s/token-range-replicas", "grant_bulk_read_test_keyspace");
+        // TOPOLOGY:READ permission not granted with ANALYTICS:READ_DIRECT
+        verifyAccess(context, testCompleteLatch, HttpMethod.GET, topologyRoute, clientKeystorePath, true);
+    }
+
+    void testGrantingBulkReadFeaturePermissionAcrossTables(VertxTestContext context) throws Exception
+    {
+        Path clientKeystorePath = clientKeystorePath("spiffe://cassandra/sidecar/bulk_read_test_user");
+
+        String createSnapshotRoute = String.format("/api/v1/keyspaces/%s/tables/%s/snapshots/my-snapshot",
+                                                   "grant_bulk_read_across_tables_test_keyspace", "test_table");
+
+        // SNAPSHOT:CREATE permission granted for data/grant_bulk_read_across_tables_test_keyspace/test_table with ANALYTICS:READ_DIRECT
+        verifyAccess(context, testCompleteLatch, HttpMethod.PUT, createSnapshotRoute, clientKeystorePath, false);
+
+        String createSnapshotRouteTable2 = String.format("/api/v1/keyspaces/%s/tables/%s/snapshots/my-snapshot",
+                                                         "grant_bulk_read_across_tables_test_keyspace", "test_table2");
+
+        // SNAPSHOT:CREATE for different table also granted with keyspace scoped ANALYTICS:READ_DIRECT permission
+        verifyAccess(context, testCompleteLatch, HttpMethod.PUT, createSnapshotRouteTable2, clientKeystorePath, false);
+
+        String createSnapshotRouteKeyspace2 = String.format("/api/v1/keyspaces/%s/tables/%s/snapshots/my-snapshot",
+                                                            "test_keyspace", "test_table2");
+
+        // SNAPSHOT:CREATE for different keyspace not granted with keyspace scoped ANALYTICS:READ_DIRECT permission
+        verifyAccess(context, testCompleteLatch, HttpMethod.PUT, createSnapshotRouteKeyspace2, clientKeystorePath, true);
+    }
+
+    void testGrantingBulkReadFeaturePermissionAcrossData(VertxTestContext context) throws Exception
+    {
+        Path clientKeystorePath = clientKeystorePath("spiffe://cassandra/sidecar/bulk_read_across_data_test_user");
+
+        String createSnapshotRoute = String.format("/api/v1/keyspaces/%s/tables/%s/snapshots/my-snapshot-2",
+                                                   "test_keyspace", "test_table");
+
+        // SNAPSHOT:CREATE permission granted for data/test_keyspace/test_table with ANALYTICS:READ_DIRECT permission
+        verifyAccess(context, testCompleteLatch, HttpMethod.PUT, createSnapshotRoute, clientKeystorePath, false);
+
+        String createSnapshotRouteKeyspace2 = String.format("/api/v1/keyspaces/%s/tables/%s/snapshots/my-snapshot-3",
+                                                            "non_admin_test_keyspace", "test_table");
+
+        // SNAPSHOT:CREATE for different keyspace also granted with data scoped ANALYTICS:READ_DIRECT permission
+        verifyAccess(context, testCompleteLatch, HttpMethod.PUT, createSnapshotRouteKeyspace2, clientKeystorePath, false);
+    }
+
+    void testGrantingBulkWriteFeaturePermission(VertxTestContext context) throws Exception
+    {
+        Path clientKeystorePath = clientKeystorePath("spiffe://cassandra/sidecar/bulk_write_test_user");
+
+        String topologyRoute = String.format("/api/v1/keyspaces/%s/token-range-replicas", "grant_bulk_write_test_keyspace");
+        // TOPOLOGY:READ permission granted with ANALYTICS:WRITE_DIRECT
+        verifyAccess(context, testCompleteLatch, HttpMethod.GET, topologyRoute, clientKeystorePath, false);
+
+        String keyspaceRingRoute = String.format("/api/v1/cassandra/ring/keyspaces/%s", "grant_bulk_write_test_keyspace");
+
+        // RING:READ permission not granted for data/grant_bulk_write_test_keyspace with ANALYTICS:WRITE_DIRECT
+        verifyAccess(context, testCompleteLatch, HttpMethod.GET, keyspaceRingRoute, clientKeystorePath, true);
+    }
+
+    void testGrantingBothBulkReadAndWriteFeaturePermission(VertxTestContext context) throws Exception
+    {
+        Path clientKeystorePath = clientKeystorePath("spiffe://cassandra/sidecar/bulk_read_write_test_user");
+
+        String topologyRoute = String.format("/api/v1/keyspaces/%s/token-range-replicas", "grant_bulk_read_write_test_keyspace");
+        // TOPOLOGY:READ permission granted with ANALYTICS:READ_DIRECT,WRITE_DIRECT
+        verifyAccess(context, testCompleteLatch, HttpMethod.GET, topologyRoute, clientKeystorePath, false);
+
+        String keyspaceRingRoute = String.format("/api/v1/cassandra/ring/keyspaces/%s", "grant_bulk_read_write_test_keyspace");
+
+        // RING:READ permission granted for data/grant_bulk_read_write_test_keyspace with ANALYTICS:READ_DIRECT,WRITE_DIRECT
+        verifyAccess(context, testCompleteLatch, HttpMethod.GET, keyspaceRingRoute, clientKeystorePath, false);
+
+        String createSnapshotRoute = String.format("/api/v1/keyspaces/%s/tables/%s/snapshots/my-snapshot",
+                                                   "grant_bulk_read_write_test_keyspace", "test_table");
+
+        // SNAPSHOT:CREATE permission granted for data/grant_bulk_read_write_test_keyspace/test_table with ANALYTICS:READ_DIRECT,WRITE_DIRECT
+        verifyAccess(context, testCompleteLatch, HttpMethod.PUT, createSnapshotRoute, clientKeystorePath, false);
+    }
+
+    void testGrantingAllAnalyticsRelatedPermissions(VertxTestContext context) throws Exception
+    {
+        Path clientKeystorePath = clientKeystorePath("spiffe://cassandra/sidecar/all_analytics_permission_test_user");
+
+        String topologyRoute = String.format("/api/v1/keyspaces/%s/token-range-replicas", "all_analytics_permission_test_keyspace");
+        // TOPOLOGY:READ permission under ANALYTICS:WRITE_DIRECT granted with ANALYTICS:*
+        verifyAccess(context, testCompleteLatch, HttpMethod.GET, topologyRoute, clientKeystorePath, false);
+
+        String keyspaceRingRoute = String.format("/api/v1/cassandra/ring/keyspaces/%s", "all_analytics_permission_test_keyspace");
+
+        // RING:READ permission under ANALYTICS:READ_DIRECT granted with ANALYTICS:*
+        verifyAccess(context, testCompleteLatch, HttpMethod.GET, keyspaceRingRoute, clientKeystorePath, false);
+    }
+
+    void testGrantingCdcFeaturePermission(VertxTestContext context) throws Exception
+    {
+        String listCdcPath = "/api/v1/cdc/segments";
+        Path clientKeystorePath = clientKeystorePath("spiffe://cassandra/sidecar/cdc_test_user");
+        // CDC permission granted with CDC
+        WebClient client = createClient(clientKeystorePath, truststorePath);
+        createReq(client, HttpMethod.GET, listCdcPath)
+        .onFailure(context::failNow)
+        .onSuccess(listResp -> {
+            // CDC permission granted
+            // CDC is not turned on for cluster, hence 500 or 503 expected
+            assertThat(listResp.statusCode()).isIn(HttpResponseStatus.SERVICE_UNAVAILABLE.code(),
+                                                   HttpResponseStatus.INTERNAL_SERVER_ERROR.code());
+            testCompleteLatch.countDown();
+        });
+    }
+
     private void prepareForTest(CassandraTestContext cassandraContext) throws Exception
     {
         // mTLS authentication was added in Cassandra starting 5.0 version
@@ -275,12 +409,23 @@ class RoleBasedAuthorizationIntegrationTest extends IntegrationTestBase
         createKeyspace("grant_keyspace_test_keyspace");
         createKeyspace("grant_tables_except_keyspace_test_keyspace");
         createKeyspace("multiple_permissions_required_test_keyspace");
+        createKeyspace("grant_bulk_read_test_keyspace");
+        createKeyspace("grant_bulk_read_across_tables_test_keyspace");
+        createKeyspace("grant_bulk_write_test_keyspace");
+        createKeyspace("grant_bulk_read_write_test_keyspace");
+        createKeyspace("all_analytics_permission_test_keyspace");
         createTable("test_keyspace", "test_table");
         createTable("non_admin_test_keyspace", "test_table");
         createTable("grant_table_test_keyspace", "test_table");
         createTable("grant_keyspace_test_keyspace", "test_table");
         createTable("grant_tables_except_keyspace_test_keyspace", "test_table");
         createTable("multiple_permissions_required_test_keyspace", "test_table");
+        createTable("grant_bulk_read_test_keyspace", "test_table");
+        createTable("grant_bulk_read_across_tables_test_keyspace", "test_table");
+        createTable("grant_bulk_read_across_tables_test_keyspace", "test_table2");
+        createTable("grant_bulk_write_test_keyspace", "test_table");
+        createTable("grant_bulk_read_write_test_keyspace", "test_table");
+        createTable("all_analytics_permission_test_keyspace", "test_table");
     }
 
     private void createRequiredRoles(CassandraTestContext cassandraContext)
@@ -299,6 +444,24 @@ class RoleBasedAuthorizationIntegrationTest extends IntegrationTestBase
 
         createRole("wildcard_with_subparts_test_role", false);
         insertIdentityRole(cassandraContext, "spiffe://cassandra/sidecar/wildcard_with_subparts_test_user", "wildcard_with_subparts_test_role");
+
+        createRole("bulk_read_test_role", false);
+        insertIdentityRole(cassandraContext, "spiffe://cassandra/sidecar/bulk_read_test_user", "bulk_read_test_role");
+
+        createRole("bulk_read_across_data_test_role", false);
+        insertIdentityRole(cassandraContext, "spiffe://cassandra/sidecar/bulk_read_across_data_test_user", "bulk_read_across_data_test_role");
+
+        createRole("bulk_write_test_role", false);
+        insertIdentityRole(cassandraContext, "spiffe://cassandra/sidecar/bulk_write_test_user", "bulk_write_test_role");
+
+        createRole("bulk_read_write_test_role", false);
+        insertIdentityRole(cassandraContext, "spiffe://cassandra/sidecar/bulk_read_write_test_user", "bulk_read_write_test_role");
+
+        createRole("all_analytics_permission_test_role", false);
+        insertIdentityRole(cassandraContext, "spiffe://cassandra/sidecar/all_analytics_permission_test_user", "all_analytics_permission_test_role");
+
+        createRole("cdc_test_role", false);
+        insertIdentityRole(cassandraContext, "spiffe://cassandra/sidecar/cdc_test_user", "cdc_test_role");
     }
 
     private void grantRequiredPermissions()
@@ -325,6 +488,27 @@ class RoleBasedAuthorizationIntegrationTest extends IntegrationTestBase
         grantSidecarPermission("non_admin_test_role",
                                "data/multiple_permissions_required_test_keyspace/test_table",
                                "SNAPSHOT:CREATE");
+
+        // permission for testGrantingBulkReadFeaturePermission
+        grantSidecarPermission("bulk_read_test_role", "data/grant_bulk_read_test_keyspace/test_table", "ANALYTICS:READ_DIRECT");
+
+        // permission for testGrantingBulkReadFeaturePermissionAcrossTables
+        grantSidecarPermission("bulk_read_test_role", "data/grant_bulk_read_across_tables_test_keyspace", "ANALYTICS:READ_DIRECT");
+
+        // permission for testGrantingBulkReadFeaturePermissionAcrossData
+        grantSidecarPermission("bulk_read_across_data_test_role", "data", "ANALYTICS:READ_DIRECT");
+
+        // permission for testGrantingBulkWriteFeaturePermission
+        grantSidecarPermission("bulk_write_test_role", "data/grant_bulk_write_test_keyspace/test_table", "ANALYTICS:WRITE_DIRECT");
+
+        // permission for testGrantingBothBulkReadAndWriteFeaturePermission
+        grantSidecarPermission("bulk_read_write_test_role", "data/grant_bulk_read_write_test_keyspace/test_table", "ANALYTICS:READ_DIRECT,WRITE_DIRECT");
+
+        // permission for testGrantingAllAnalyticsRelatedPermissions
+        grantSidecarPermission("all_analytics_permission_test_role", "data/all_analytics_permission_test_keyspace/test_table", "ANALYTICS:*");
+
+        // permission for testGrantingCdcFeaturePermission
+        grantSidecarPermission("cdc_test_role", "cluster", "CDC");
     }
 
     private void createRequiredKeystores() throws Exception
