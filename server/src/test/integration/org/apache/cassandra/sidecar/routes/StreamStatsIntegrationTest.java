@@ -18,40 +18,26 @@
 
 package org.apache.cassandra.sidecar.routes;
 
-import java.util.concurrent.Callable;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import com.google.common.util.concurrent.Uninterruptibles;
-import org.junit.jupiter.api.extension.ExtendWith;
 
-import com.datastax.driver.core.Session;
-import io.netty.handler.codec.http.HttpResponseStatus;
-import io.vertx.core.buffer.Buffer;
-import io.vertx.ext.web.client.HttpResponse;
-import io.vertx.junit5.VertxExtension;
-import io.vertx.junit5.VertxTestContext;
-import net.bytebuddy.ByteBuddy;
-import net.bytebuddy.description.type.TypeDescription;
-import net.bytebuddy.dynamic.ClassFileLocator;
-import net.bytebuddy.dynamic.TypeResolutionStrategy;
-import net.bytebuddy.dynamic.loading.ClassLoadingStrategy;
-import net.bytebuddy.implementation.MethodDelegation;
-import net.bytebuddy.implementation.bind.annotation.SuperCall;
-import net.bytebuddy.pool.TypePool;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import io.vertx.ext.web.client.predicate.ResponsePredicate;
 import org.apache.cassandra.distributed.UpgradeableCluster;
+import org.apache.cassandra.distributed.api.IInstance;
 import org.apache.cassandra.distributed.api.IUpgradeableInstance;
-import org.apache.cassandra.distributed.shared.ClusterUtils;
 import org.apache.cassandra.sidecar.common.response.StreamStatsResponse;
 import org.apache.cassandra.sidecar.common.response.data.StreamsProgressStats;
 import org.apache.cassandra.sidecar.common.server.data.QualifiedTableName;
 import org.apache.cassandra.sidecar.testing.IntegrationTestBase;
-import org.apache.cassandra.streaming.StreamOperation;
 import org.apache.cassandra.testing.CassandraIntegrationTest;
-import org.apache.cassandra.testing.ConfigurableCassandraTestContext;
+import org.apache.cassandra.testing.CassandraTestContext;
 
-import static net.bytebuddy.matcher.ElementMatchers.named;
 import static org.apache.cassandra.testing.utils.AssertionUtils.getBlocking;
 import static org.apache.cassandra.testing.utils.AssertionUtils.loopAssert;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -59,74 +45,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Tests the stream stats endpoint with cassandra container.
  */
-@ExtendWith(VertxExtension.class)
 public class StreamStatsIntegrationTest extends IntegrationTestBase
 {
-    @CassandraIntegrationTest(numDataDirsPerInstance = 4, nodesPerDc = 2, network = true, buildCluster = false)
-    void streamStatsTest(VertxTestContext context, ConfigurableCassandraTestContext cassandraTestContext) throws Exception
+    private static final Logger LOGGER = LoggerFactory.getLogger(StreamStatsIntegrationTest.class);
+
+    @CassandraIntegrationTest(nodesPerDc = 2, network = true)
+    void streamStatsTest(CassandraTestContext cassandraTestContext)
     {
-        BBHelperDecommissioningNode.reset();
-        UpgradeableCluster cluster = cassandraTestContext.configureAndStartCluster(
-        builder -> builder.withInstanceInitializer(BBHelperDecommissioningNode::install));
-        IUpgradeableInstance node = cluster.get(2);
+        UpgradeableCluster cluster = cassandraTestContext.cluster();
 
-        createTestKeyspace();
-        createTestTableAndPopulate();
-
-        startAsync("Decommission node" + node.config().num(),
-                   () -> node.nodetoolResult("decommission", "--force").asserts().success());
-        AtomicBoolean hasStats = new AtomicBoolean(false);
-        AtomicBoolean dataReceived = new AtomicBoolean(false);
-
-        // Wait until nodes have reached expected state
-        awaitLatchOrThrow(BBHelperDecommissioningNode.transientStateStart, 2, TimeUnit.MINUTES, "transientStateStart");
-
-        // optimal no. of attempts to poll for stats to capture streaming stats during node decommissioning
-        loopAssert(15, 200, () -> {
-            StreamsProgressStats progressStats = streamStats(hasStats, dataReceived);
-            assertThat(hasStats).isTrue();
-            assertThat(dataReceived)
-            .describedAs("Stream Progress Stats - totalFilesReceived:" + progressStats.totalFilesReceived() +
-                         " totalBytesReceived:" + progressStats.totalBytesReceived())
-            .isTrue();
-        });
-        ClusterUtils.awaitGossipStatus(node, node, "LEFT");
-        BBHelperDecommissioningNode.transientStateEnd.countDown();
-
-        context.completeNow();
-        context.awaitCompletion(2, TimeUnit.MINUTES);
-    }
-
-    private StreamsProgressStats streamStats(AtomicBoolean hasStats, AtomicBoolean dataReceived)
-    {
-        String testRoute = "/api/v1/cassandra/stats/streams";
-        HttpResponse<Buffer> resp;
-        resp = getBlocking(client.get(server.actualPort(), "127.0.0.1", testRoute)
-                                 .send());
-        return assertStreamStatsResponseOK(resp, hasStats, dataReceived);
-    }
-
-    StreamsProgressStats assertStreamStatsResponseOK(HttpResponse<Buffer> response, AtomicBoolean hasStats, AtomicBoolean dataReceived)
-    {
-        assertThat(response.statusCode()).isEqualTo(HttpResponseStatus.OK.code());
-        StreamStatsResponse streamStatsResponse = response.bodyAsJson(StreamStatsResponse.class);
-        assertThat(streamStatsResponse).isNotNull();
-        StreamsProgressStats streamProgress = streamStatsResponse.streamsProgressStats();
-        assertThat(streamProgress).isNotNull();
-        if (streamProgress.totalFilesToReceive() > 0)
-        {
-            hasStats.set(true);
-            if (streamProgress.totalFilesReceived() > 0)
-            {
-                dataReceived.set(true);
-                assertThat(streamProgress.totalBytesReceived()).isGreaterThan(0);
-            }
-        }
-        return streamProgress;
-    }
-
-    QualifiedTableName createTestTableAndPopulate()
-    {
+        createTestKeyspace(Map.of("datacenter1", 2));
         QualifiedTableName tableName = createTestTable(
         "CREATE TABLE %s ( \n" +
         "  race_year int, \n" +
@@ -135,54 +63,97 @@ public class StreamStatsIntegrationTest extends IntegrationTestBase
         "  rank int, \n" +
         "  PRIMARY KEY ((race_year, race_name), rank) \n" +
         ");");
-        Session session = maybeGetSession();
+        // craft inconsistency for repair
+        populateDataAtNode2Only(cluster, tableName);
 
-        session.execute("CREATE INDEX ryear ON " + tableName + " (race_year);");
+        // Poll stream stats while repair is running in the background.
+        CountDownLatch testStart = new CountDownLatch(1);
+        IUpgradeableInstance node = cluster.get(1);
+        AtomicReference<RuntimeException> nodetoolError = new AtomicReference<>();
+        startRepairAsync(node, testStart, tableName, nodetoolError);
 
-        for (int i = 1; i <= 1000; i++)
-        {
-            session.execute("INSERT INTO " + tableName + " (race_year, race_name, rank, cyclist_name) " +
-                            "VALUES (2015, 'Tour of Japan - Stage 4 - Minami > Shinshu', " + i + ", 'Benjamin PRADES');");
-        }
-        return tableName;
+        TestState testState = new TestState();
+        testStart.countDown();
+        loopAssert(10, 500, () -> {
+            if (nodetoolError.get() != null)
+            {
+                throw nodetoolError.get();
+            }
+            streamStats(testState);
+            testState.assertCompletion();
+        });
     }
 
-    /**
-     * ByteBuddy Helper for decommissioning node
-     */
-    public static class BBHelperDecommissioningNode
+    private void startRepairAsync(IUpgradeableInstance node, CountDownLatch testStart, QualifiedTableName tableName, AtomicReference<RuntimeException> nodetoolError)
     {
-        static CountDownLatch transientStateStart = new CountDownLatch(1);
-        static CountDownLatch transientStateEnd = new CountDownLatch(1);
+        startAsync("Repairing node" + node.config().num(),
+                   () -> {
+                       Uninterruptibles.awaitUninterruptibly(testStart);
+                       try
+                       {
+                           node.nodetoolResult("repair", tableName.keyspace(), tableName.tableName(), "--full").asserts().success();
+                       }
+                       catch (Throwable cause)
+                       {
+                           nodetoolError.set(new RuntimeException("Nodetool failed", cause));
+                       }
+                   });
+    }
 
-        public static void install(ClassLoader cl, Integer nodeNumber)
+    private void streamStats(TestState testState)
+    {
+        String testRoute = "/api/v1/cassandra/stats/streams";
+        StreamStatsResponse streamStatsResponse = getBlocking(client.get(server.actualPort(), "127.0.0.1", testRoute)
+                                                                    .expect(ResponsePredicate.SC_OK)
+                                                                    .send())
+                                                  .bodyAsJson(StreamStatsResponse.class);
+        assertThat(streamStatsResponse).isNotNull();
+        StreamsProgressStats streamProgress = streamStatsResponse.streamsProgressStats();
+        assertThat(streamProgress).isNotNull();
+        LOGGER.info("Fetched {}", streamProgress);
+        testState.update(streamProgress);
+    }
+
+    static class TestState
+    {
+        StreamsProgressStats lastStats;
+        boolean streamStarted = false, streamCompleted = false;
+
+        void update(StreamsProgressStats streamProgress)
         {
-            if (nodeNumber == 2)
+            lastStats = streamProgress;
+            if (streamProgress.totalFilesToReceive() > 0)
             {
-                TypePool typePool = TypePool.Default.of(cl);
-                TypeDescription description = typePool.describe("org.apache.cassandra.streaming.StreamCoordinator")
-                                                      .resolve();
-                new ByteBuddy().rebase(description, ClassFileLocator.ForClassLoader.of(cl))
-                               .method(named("connectAllStreamSessions"))
-                               .intercept(MethodDelegation.to(BBHelperDecommissioningNode.class))
-                               // Defer class loading until all dependencies are loaded
-                               .make(TypeResolutionStrategy.Lazy.INSTANCE, typePool)
-                               .load(cl, ClassLoadingStrategy.Default.INJECTION);
+                streamStarted = true;
+            }
+
+            if (streamStarted && streamProgress.totalFilesReceived() == streamProgress.totalFilesToReceive())
+            {
+                streamCompleted = true;
             }
         }
 
-        @SuppressWarnings("unused")
-        public static void connectAllStreamSessions(@SuperCall Callable<StreamOperation> orig) throws Exception
+        void assertCompletion()
         {
-            transientStateStart.countDown();
-            Uninterruptibles.sleepUninterruptibly(3, TimeUnit.SECONDS);
-            orig.call();
+            assertThat(streamStarted)
+            .describedAs("Expecting to have non-empty stream stats. last stats: " + lastStats)
+            .isTrue();
+            assertThat(streamCompleted)
+            .describedAs("Expecting to complete. last stats: " + lastStats)
+            .isTrue();
         }
+    }
 
-        public static void reset()
+    void populateDataAtNode2Only(UpgradeableCluster cluster, QualifiedTableName tableName)
+    {
+        IInstance node = cluster.get(2);
+        // disable compaction for the table to have more file to stream
+        node.nodetoolResult("disableautocompaction", tableName.keyspace(), tableName.tableName()).asserts().success();
+        for (int i = 1; i <= 100; i++)
         {
-            transientStateStart = new CountDownLatch(1);
-            transientStateEnd = new CountDownLatch(1);
+            node.executeInternal("INSERT INTO " + tableName + " (race_year, race_name, rank, cyclist_name) " +
+                                 "VALUES (2015, 'Tour of Japan - Stage 4 - Minami > Shinshu', " + i + ", 'Benjamin PRADES');");
+            node.flush(TEST_KEYSPACE);
         }
     }
 }
