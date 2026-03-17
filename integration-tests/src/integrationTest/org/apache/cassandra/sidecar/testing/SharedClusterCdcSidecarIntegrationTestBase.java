@@ -51,11 +51,8 @@ import org.apache.cassandra.sidecar.coordination.TokenRingProvider;
 import org.apache.cassandra.sidecar.db.CdcDatabaseAccessor;
 import org.apache.cassandra.sidecar.db.VirtualTablesDatabaseAccessor;
 import org.apache.cassandra.sidecar.utils.InstanceMetadataFetcher;
-import org.apache.cassandra.sidecar.utils.SimpleCassandraVersion;
 import org.apache.cassandra.testing.ClusterBuilderConfiguration;
 import org.apache.kafka.common.serialization.Serializer;
-
-import static org.assertj.core.api.Assumptions.assumeThat;
 
 /**
  * Base class for CDC integration tests. Extends SharedClusterIntegrationTestBase with
