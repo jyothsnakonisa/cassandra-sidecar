@@ -195,6 +195,7 @@ startScripts {
                               "-Dsidecar.config=" + confFile,
                               "-Dlogback.configurationFile=" + logbackConfFile,
                               "-Dvertx.logger-delegate-factory-class-name=io.vertx.core.logging.SLF4JLogDelegateFactory"]
+        defaultJvmOpts += project.ext.JDK11_OPTIONS
         unixScript.text = unixScript.text.replace("DEFAULT_JVM_OPTS='\"PLACEHOLDER\"'",
                 "DEFAULT_JVM_OPTS=\"${defaultJvmOpts.join(" ")}\"")
         windowsScript.delete()
