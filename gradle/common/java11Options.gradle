@@ -40,5 +40,6 @@ project.ext.JDK11_OPTIONS = ['-Djdk.attach.allowAttachSelf=true',
                              '--add-opens', 'java.base/jdk.internal.math=ALL-UNNAMED',
                              '--add-opens', 'java.base/jdk.internal.module=ALL-UNNAMED',
                              '--add-opens', 'java.base/jdk.internal.util.jar=ALL-UNNAMED',
+                             '--add-opens', 'java.base/java.lang.invoke=ALL-UNNAMED', //java21
                              '--add-opens', 'java.rmi/sun.rmi.transport.tcp=ALL-UNNAMED', //java17
                              '--add-opens', 'jdk.management/com.sun.management.internal=ALL-UNNAMED']
