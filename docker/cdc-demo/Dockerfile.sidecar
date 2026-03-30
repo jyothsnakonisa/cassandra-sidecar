@@ -40,7 +40,7 @@ COPY server/          server/
 COPY conf/            conf/
 
 # Stage local Maven artifacts so Gradle's mavenLocal() can resolve them.
-COPY local-m2/ /root/.m2/repository/
+COPY docker/cdc-demo/local-m2/ /root/.m2/repository/
 
 # Output: build/install/apache-cassandra-sidecar/{bin,lib,agents,conf}
 RUN ./gradlew installDist -x test -x integrationTest -x containerTest \
