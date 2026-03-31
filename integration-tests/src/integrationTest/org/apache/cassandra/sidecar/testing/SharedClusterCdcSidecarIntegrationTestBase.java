@@ -24,13 +24,13 @@ import java.util.function.Function;
 import org.junit.jupiter.api.AfterEach;
 
 import com.google.inject.AbstractModule;
+import com.google.inject.Provider;
 import com.google.inject.Provides;
 import com.google.inject.Singleton;
 import io.vertx.core.Vertx;
 import org.apache.cassandra.bridge.CassandraBridgeFactory;
 import org.apache.cassandra.cdc.api.SchemaSupplier;
 import org.apache.cassandra.cdc.msg.CdcEvent;
-import org.apache.cassandra.cdc.sidecar.CdcSidecarInstancesProvider;
 import org.apache.cassandra.cdc.sidecar.ClusterConfigProvider;
 import org.apache.cassandra.cdc.sidecar.SidecarCdcClient;
 import org.apache.cassandra.cdc.stats.ICdcStats;
@@ -42,7 +42,6 @@ import org.apache.cassandra.sidecar.cdc.SidecarCdcStats;
 import org.apache.cassandra.sidecar.concurrent.ExecutorPools;
 import org.apache.cassandra.sidecar.config.ServiceConfiguration;
 import org.apache.cassandra.sidecar.config.SidecarClientConfiguration;
-import org.apache.cassandra.sidecar.config.SidecarConfiguration;
 import org.apache.cassandra.sidecar.config.yaml.ServiceConfigurationImpl;
 import org.apache.cassandra.sidecar.config.yaml.SidecarConfigurationImpl;
 import org.apache.cassandra.sidecar.coordination.ContentionFreeRangeManager;
@@ -142,12 +141,9 @@ public abstract class SharedClusterCdcSidecarIntegrationTestBase extends SharedC
         @Provides
         @Singleton
         CdcPublisher cdcPublisher(Vertx vertx,
-                                  SidecarConfiguration sidecarConfiguration,
                                   ExecutorPools executorPools,
                                   ClusterConfigProvider clusterConfigProvider,
                                   SchemaSupplier schemaSupplier,
-                                  CdcSidecarInstancesProvider sidecarInstancesProvider,
-                                  SidecarCdcClient.ClientConfig clientConfig,
                                   InstanceMetadataFetcher instanceMetadataFetcher,
                                   CdcConfig conf,
                                   CdcDatabaseAccessor databaseAccessor,
@@ -156,16 +152,14 @@ public abstract class SharedClusterCdcSidecarIntegrationTestBase extends SharedC
                                   SidecarCdcStats sidecarCdcStats,
                                   Serializer<CdcEvent> avroSerializer,
                                   TokenRingProvider tokenRingProvider,
-                                  CassandraBridgeFactory cassandraBridgeFactory)
+                                  CassandraBridgeFactory cassandraBridgeFactory,
+                                  Provider<SidecarCdcClient> sidecarCdcClientProvider)
         {
             RangeManager rangeManager = new ContentionFreeRangeManager(vertx, tokenRingProvider);
             return new TestCdcPublisher(vertx,
-                                       sidecarConfiguration,
                                        executorPools,
                                        clusterConfigProvider,
                                        schemaSupplier,
-                                       sidecarInstancesProvider,
-                                       clientConfig,
                                        instanceMetadataFetcher,
                                        conf,
                                        databaseAccessor,
@@ -174,7 +168,8 @@ public abstract class SharedClusterCdcSidecarIntegrationTestBase extends SharedC
                                        sidecarCdcStats,
                                        avroSerializer,
                                        () -> rangeManager,
-                                       cassandraBridgeFactory);
+                                       cassandraBridgeFactory,
+                                       sidecarCdcClientProvider);
         }
 
         @Provides

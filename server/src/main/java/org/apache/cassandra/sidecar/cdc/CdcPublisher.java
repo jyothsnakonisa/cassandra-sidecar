@@ -18,10 +18,6 @@
 
 package org.apache.cassandra.sidecar.cdc;
 
-import java.util.List;
-import java.util.Map;
-import java.util.TreeMap;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,21 +37,14 @@ import org.apache.cassandra.cdc.api.SchemaSupplier;
 import org.apache.cassandra.cdc.kafka.KafkaPublisher;
 import org.apache.cassandra.cdc.kafka.TopicSupplier;
 import org.apache.cassandra.cdc.msg.CdcEvent;
-import org.apache.cassandra.cdc.sidecar.CdcSidecarInstancesProvider;
 import org.apache.cassandra.cdc.sidecar.ClusterConfigProvider;
-import org.apache.cassandra.cdc.sidecar.SidecarCdc;
 import org.apache.cassandra.cdc.sidecar.SidecarCdcClient;
 import org.apache.cassandra.cdc.stats.ICdcStats;
-import org.apache.cassandra.secrets.SecretsProvider;
-import org.apache.cassandra.secrets.SslConfig;
-import org.apache.cassandra.secrets.SslConfigSecretsProvider;
+
 import org.apache.cassandra.sidecar.common.server.utils.DurationSpec;
 import org.apache.cassandra.sidecar.common.server.utils.MillisecondBoundConfiguration;
 import org.apache.cassandra.sidecar.concurrent.ExecutorPools;
 import org.apache.cassandra.sidecar.concurrent.TaskExecutorPool;
-import org.apache.cassandra.sidecar.config.KeyStoreConfiguration;
-import org.apache.cassandra.sidecar.config.SidecarConfiguration;
-import org.apache.cassandra.sidecar.config.SslConfiguration;
 import org.apache.cassandra.sidecar.coordination.RangeManager;
 import org.apache.cassandra.sidecar.db.CdcDatabaseAccessor;
 import org.apache.cassandra.sidecar.db.VirtualTablesDatabaseAccessor;
@@ -87,27 +76,22 @@ public class CdcPublisher implements Handler<Message<Object>>, PeriodicTask
     private final VirtualTablesDatabaseAccessor virtualTables;
     private final SidecarCdcStats sidecarCdcStats;
     private final SchemaSupplier schemaSupplier;
-    private final CdcSidecarInstancesProvider sidecarInstancesProvider;
     private final InstanceMetadataFetcher instanceMetadataFetcher;
     private final ClusterConfigProvider clusterConfigProvider;
-    private final SidecarCdcClient.ClientConfig clientConfig;
     private final ICdcStats cdcStats;
-    private final SidecarConfiguration sidecarConfiguration;
     private CdcManager cdcManager;
     private final Serializer<CdcEvent> avroSerializer;
     private final Provider<RangeManager> rangeManagerProvider;
     private final CassandraBridgeFactory cassandraBridgeFactory;
     KafkaProducer<String, byte[]> producer;
     KafkaPublisher kafkaPublisher;
+    private final Provider<SidecarCdcClient> sidecarCdcClientProvider;
 
     @Inject
     public CdcPublisher(Vertx vertx,
-                        SidecarConfiguration sidecarConfiguration,
                         ExecutorPools executorPools,
                         ClusterConfigProvider clusterConfigProvider,
                         SchemaSupplier schemaSupplier,
-                        CdcSidecarInstancesProvider sidecarInstancesProvider,
-                        SidecarCdcClient.ClientConfig clientConfig,
                         InstanceMetadataFetcher instanceMetadataFetcher,
                         CdcConfig conf,
                         CdcDatabaseAccessor databaseAccessor,
@@ -116,7 +100,8 @@ public class CdcPublisher implements Handler<Message<Object>>, PeriodicTask
                         SidecarCdcStats sidecarCdcStats,
                         Serializer<CdcEvent> avroSerializer,
                         Provider<RangeManager> rangeManagerProvider,
-                        CassandraBridgeFactory cassandraBridgeFactory)
+                        CassandraBridgeFactory cassandraBridgeFactory,
+                        Provider<SidecarCdcClient> sidecarCdcClientProvider)
     {
         this.sidecarCdcStats = sidecarCdcStats;
         this.executorPools = executorPools.internal();
@@ -125,15 +110,13 @@ public class CdcPublisher implements Handler<Message<Object>>, PeriodicTask
         this.virtualTables = virtualTables;
 
         this.schemaSupplier = schemaSupplier;
-        this.sidecarInstancesProvider = sidecarInstancesProvider;
         this.instanceMetadataFetcher = instanceMetadataFetcher;
         this.clusterConfigProvider = clusterConfigProvider;
-        this.clientConfig = clientConfig;
         this.cdcStats = cdcStats;
-        this.sidecarConfiguration = sidecarConfiguration;
         this.avroSerializer = avroSerializer;
         this.rangeManagerProvider = rangeManagerProvider;
         this.cassandraBridgeFactory = cassandraBridgeFactory;
+        this.sidecarCdcClientProvider = sidecarCdcClientProvider;
 
         if (conf.cdcEnabled())
         {
@@ -144,37 +127,6 @@ public class CdcPublisher implements Handler<Message<Object>>, PeriodicTask
             vertx.eventBus().localConsumer(ON_CDC_CACHE_WARMED_UP.address(), this);
             vertx.eventBus().localConsumer(ON_CDC_CONFIGURATION_CHANGED.address(), new ConfigChangedHandler());
         }
-    }
-
-    public SecretsProvider secretsProvider()
-    {
-        SslConfiguration sslConfiguration = sidecarConfiguration.sidecarClientConfiguration().sslConfiguration();
-
-        if (sslConfiguration == null || !sslConfiguration.enabled())
-        {
-            return null;
-        }
-
-        Map<String, String> sslConfigMap = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
-
-        if (sslConfiguration.isKeystoreConfigured())
-        {
-            KeyStoreConfiguration keystore = sslConfiguration.keystore();
-            sslConfigMap.put(SslConfig.KEYSTORE_PATH, keystore.path());
-            sslConfigMap.put(SslConfig.KEYSTORE_PASSWORD, keystore.password());
-            sslConfigMap.put(SslConfig.KEYSTORE_TYPE, keystore.type());
-        }
-
-        if (sslConfiguration.isTrustStoreConfigured())
-        {
-            KeyStoreConfiguration truststore = sslConfiguration.truststore();
-            sslConfigMap.put(SslConfig.TRUSTSTORE_PATH, truststore.path());
-            sslConfigMap.put(SslConfig.TRUSTSTORE_PASSWORD, truststore.password());
-            sslConfigMap.put(SslConfig.TRUSTSTORE_TYPE, truststore.type());
-        }
-
-        SslConfig sslConfig = SslConfig.create(sslConfigMap);
-        return new SslConfigSecretsProvider(sslConfig);
     }
 
     public EventConsumer eventConsumer(CdcConfig conf,
@@ -232,21 +184,19 @@ public class CdcPublisher implements Handler<Message<Object>>, PeriodicTask
                                     rangeManagerProvider.get(),
                                     instanceMetadataFetcher,
                                     clusterConfigProvider,
-                                    sidecarInstancesProvider,
-                                    secretsProvider(),
-                                    clientConfig,
+                                    sidecarCdcClientProvider.get(),
                                     cdcStats,
                                     this.executorPools,
                                     databaseAccessor);
 
-        List<SidecarCdc> consumers = cdcManager.buildCdcConsumers();
+        int consumerCount = cdcManager.buildCdcConsumers().size();
         cdcManager.startConsumers();
-        LOGGER.info("{} CDC iterators started successfully", consumers.size());
+        LOGGER.info("{} CDC iterators started successfully", consumerCount);
         isRunning = true;
-        sidecarCdcStats.captureCdcStarted(consumers.size());
+        sidecarCdcStats.captureCdcStarted(consumerCount);
     }
 
-    protected synchronized void restart()
+    private synchronized void restart()
     {
         try
         {
@@ -268,7 +218,7 @@ public class CdcPublisher implements Handler<Message<Object>>, PeriodicTask
         return isRunning;
     }
 
-    public synchronized void stop()
+    private synchronized void stop()
     {
         if (!isRunning)
         {
@@ -394,8 +344,16 @@ public class CdcPublisher implements Handler<Message<Object>>, PeriodicTask
     @Override
     public void execute(Promise<Void> promise)
     {
-        run();
-        promise.complete();
+        try
+        {
+            run();
+            promise.complete();
+        }
+        catch (Exception e)
+        {
+            LOGGER.error("CDC run failed", e);
+            promise.fail(e);
+        }
     }
 
     @Override

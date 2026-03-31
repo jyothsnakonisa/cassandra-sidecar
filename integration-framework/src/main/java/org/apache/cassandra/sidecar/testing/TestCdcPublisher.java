@@ -23,7 +23,6 @@ import org.apache.cassandra.bridge.CassandraBridgeFactory;
 import org.apache.cassandra.cdc.api.EventConsumer;
 import org.apache.cassandra.cdc.api.SchemaSupplier;
 import org.apache.cassandra.cdc.msg.CdcEvent;
-import org.apache.cassandra.cdc.sidecar.CdcSidecarInstancesProvider;
 import org.apache.cassandra.cdc.sidecar.ClusterConfigProvider;
 import org.apache.cassandra.cdc.sidecar.SidecarCdcClient;
 import org.apache.cassandra.cdc.stats.ICdcStats;
@@ -31,7 +30,6 @@ import org.apache.cassandra.sidecar.cdc.CdcConfig;
 import org.apache.cassandra.sidecar.cdc.CdcPublisher;
 import org.apache.cassandra.sidecar.cdc.SidecarCdcStats;
 import org.apache.cassandra.sidecar.concurrent.ExecutorPools;
-import org.apache.cassandra.sidecar.config.SidecarConfiguration;
 import org.apache.cassandra.sidecar.coordination.RangeManager;
 import org.apache.cassandra.sidecar.db.CdcDatabaseAccessor;
 import org.apache.cassandra.sidecar.db.VirtualTablesDatabaseAccessor;
@@ -50,12 +48,9 @@ public class TestCdcPublisher extends CdcPublisher
     private final CdcDatabaseAccessor databaseAccessor;
 
     public TestCdcPublisher(Vertx vertx,
-                           SidecarConfiguration sidecarConfiguration,
                            ExecutorPools executorPools,
                            ClusterConfigProvider clusterConfigProvider,
                            SchemaSupplier schemaSupplier,
-                           CdcSidecarInstancesProvider sidecarInstancesProvider,
-                           SidecarCdcClient.ClientConfig clientConfig,
                            InstanceMetadataFetcher instanceMetadataFetcher,
                            CdcConfig conf,
                            CdcDatabaseAccessor databaseAccessor,
@@ -64,13 +59,13 @@ public class TestCdcPublisher extends CdcPublisher
                            SidecarCdcStats sidecarCdcStats,
                            Serializer<CdcEvent> avroSerializer,
                            Provider<RangeManager> rangeManagerProvider,
-                           CassandraBridgeFactory cassandraBridgeFactory)
+                           CassandraBridgeFactory cassandraBridgeFactory,
+                           Provider<SidecarCdcClient> sidecarCdcClientProvider)
     {
-        super(vertx, sidecarConfiguration, executorPools, clusterConfigProvider,
-              schemaSupplier, sidecarInstancesProvider, clientConfig,
-              instanceMetadataFetcher, conf, databaseAccessor, cdcStats,
+        super(vertx, executorPools, clusterConfigProvider,
+              schemaSupplier, instanceMetadataFetcher, conf, databaseAccessor, cdcStats,
               virtualTables, sidecarCdcStats, avroSerializer, rangeManagerProvider,
-              cassandraBridgeFactory);
+              cassandraBridgeFactory, sidecarCdcClientProvider);
         this.databaseAccessor = databaseAccessor;
     }
 

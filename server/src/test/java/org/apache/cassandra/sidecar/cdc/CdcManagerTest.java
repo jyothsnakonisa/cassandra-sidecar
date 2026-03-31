@@ -34,12 +34,11 @@ import org.junit.jupiter.api.Test;
 
 import org.apache.cassandra.cdc.api.EventConsumer;
 import org.apache.cassandra.cdc.api.SchemaSupplier;
-import org.apache.cassandra.cdc.sidecar.CdcSidecarInstancesProvider;
 import org.apache.cassandra.cdc.sidecar.ClusterConfigProvider;
 import org.apache.cassandra.cdc.sidecar.SidecarCdc;
 import org.apache.cassandra.cdc.sidecar.SidecarCdcClient;
+import org.apache.cassandra.cdc.sidecar.SidecarStatePersister;
 import org.apache.cassandra.cdc.stats.ICdcStats;
-import org.apache.cassandra.secrets.SecretsProvider;
 import org.apache.cassandra.sidecar.cluster.instance.InstanceMetadata;
 import org.apache.cassandra.sidecar.common.server.cluster.locator.TokenRange;
 import org.apache.cassandra.sidecar.concurrent.TaskExecutorPool;
@@ -80,11 +79,7 @@ public class CdcManagerTest
     @Mock
     private ClusterConfigProvider clusterConfigProvider;
     @Mock
-    private CdcSidecarInstancesProvider sidecarInstancesProvider;
-    @Mock
-    private SecretsProvider secretsProvider;
-    @Mock
-    private SidecarCdcClient.ClientConfig clientConfig;
+    private SidecarCdcClient sidecarCdcClient;
     @Mock
     private ICdcStats cdcStats;
     @Mock
@@ -106,9 +101,7 @@ public class CdcManagerTest
             rangeManager,
             instanceFetcher,
             clusterConfigProvider,
-            sidecarInstancesProvider,
-            secretsProvider,
-            clientConfig,
+            sidecarCdcClient,
             cdcStats,
             taskExecutorPool,
             cdcDatabaseAccessor
@@ -152,12 +145,12 @@ public class CdcManagerTest
         when(cdcConfig.jobId()).thenReturn("test-job");
 
         CdcManager spyManager = spy(cdcManager);
-        SidecarCdc mockConsumer = mock(SidecarCdc.class);
-        doReturn(mockConsumer).when(spyManager).loadOrBuildCdcConsumer(
-            anyInt(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()
+        CdcConsumerEntry mockEntry = new CdcConsumerEntry(mock(SidecarCdc.class), mock(SidecarStatePersister.class));
+        doReturn(mockEntry).when(spyManager).loadOrBuildCdcConsumer(
+            anyInt(), any(), any(), any(), any(), any(), any(), any(), any()
         );
 
-        List<SidecarCdc> consumers = spyManager.buildCdcConsumers();
+        List<CdcConsumerEntry> consumers = spyManager.buildCdcConsumers();
 
         assertThat(consumers).hasSize(1);
     }
@@ -183,13 +176,13 @@ public class CdcManagerTest
         when(cdcConfig.jobId()).thenReturn("test-job");
 
         CdcManager spyManager = spy(cdcManager);
-        SidecarCdc mockConsumer1 = mock(SidecarCdc.class);
-        SidecarCdc mockConsumer2 = mock(SidecarCdc.class);
-        doReturn(mockConsumer1, mockConsumer2).when(spyManager).loadOrBuildCdcConsumer(
-            anyInt(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()
+        CdcConsumerEntry mockEntry1 = new CdcConsumerEntry(mock(SidecarCdc.class), mock(SidecarStatePersister.class));
+        CdcConsumerEntry mockEntry2 = new CdcConsumerEntry(mock(SidecarCdc.class), mock(SidecarStatePersister.class));
+        doReturn(mockEntry1, mockEntry2).when(spyManager).loadOrBuildCdcConsumer(
+            anyInt(), any(), any(), any(), any(), any(), any(), any(), any()
         );
 
-        List<SidecarCdc> consumers = spyManager.buildCdcConsumers();
+        List<CdcConsumerEntry> consumers = spyManager.buildCdcConsumers();
 
         assertThat(consumers).hasSize(2);
     }
@@ -218,13 +211,13 @@ public class CdcManagerTest
         when(cdcConfig.jobId()).thenReturn("test-job");
 
         CdcManager spyManager = spy(cdcManager);
-        SidecarCdc mockConsumer1 = mock(SidecarCdc.class);
-        SidecarCdc mockConsumer2 = mock(SidecarCdc.class);
-        doReturn(mockConsumer1, mockConsumer2).when(spyManager).loadOrBuildCdcConsumer(
-            anyInt(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()
+        CdcConsumerEntry mockEntry1 = new CdcConsumerEntry(mock(SidecarCdc.class), mock(SidecarStatePersister.class));
+        CdcConsumerEntry mockEntry2 = new CdcConsumerEntry(mock(SidecarCdc.class), mock(SidecarStatePersister.class));
+        doReturn(mockEntry1, mockEntry2).when(spyManager).loadOrBuildCdcConsumer(
+            anyInt(), any(), any(), any(), any(), any(), any(), any(), any()
         );
 
-        List<SidecarCdc> consumers = spyManager.buildCdcConsumers();
+        List<CdcConsumerEntry> consumers = spyManager.buildCdcConsumers();
 
         assertThat(consumers).hasSize(2);
     }
@@ -251,12 +244,12 @@ public class CdcManagerTest
         when(cdcConfig.jobId()).thenReturn("test-job");
 
         CdcManager spyManager = spy(cdcManager);
-        SidecarCdc mockConsumer = mock(SidecarCdc.class);
-        doReturn(mockConsumer).when(spyManager).loadOrBuildCdcConsumer(
-            anyInt(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()
+        CdcConsumerEntry mockEntry = new CdcConsumerEntry(mock(SidecarCdc.class), mock(SidecarStatePersister.class));
+        doReturn(mockEntry).when(spyManager).loadOrBuildCdcConsumer(
+            anyInt(), any(), any(), any(), any(), any(), any(), any(), any()
         );
 
-        List<SidecarCdc> consumers = spyManager.buildCdcConsumers();
+        List<CdcConsumerEntry> consumers = spyManager.buildCdcConsumers();
 
         assertThat(consumers).hasSize(1);
     }
@@ -274,12 +267,12 @@ public class CdcManagerTest
         when(cdcConfig.jobId()).thenReturn("test-job");
 
         CdcManager spyManager = spy(cdcManager);
-        SidecarCdc mockConsumer = mock(SidecarCdc.class);
-        doReturn(mockConsumer).when(spyManager).loadOrBuildCdcConsumer(
-            anyInt(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()
+        CdcConsumerEntry mockEntry = new CdcConsumerEntry(mock(SidecarCdc.class), mock(SidecarStatePersister.class));
+        doReturn(mockEntry).when(spyManager).loadOrBuildCdcConsumer(
+            anyInt(), any(), any(), any(), any(), any(), any(), any(), any()
         );
 
-        List<SidecarCdc> consumers = spyManager.buildCdcConsumers();
+        List<CdcConsumerEntry> consumers = spyManager.buildCdcConsumers();
 
         assertThat(consumers).hasSize(1);
     }
