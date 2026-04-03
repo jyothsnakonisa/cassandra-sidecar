@@ -32,6 +32,7 @@ import io.vertx.core.eventbus.Message;
 import org.apache.cassandra.bridge.CassandraBridgeFactory;
 import org.apache.cassandra.bridge.CassandraVersion;
 import org.apache.cassandra.cdc.CdcLogMode;
+import org.apache.cassandra.cdc.api.CdcOptions;
 import org.apache.cassandra.cdc.api.EventConsumer;
 import org.apache.cassandra.cdc.api.SchemaSupplier;
 import org.apache.cassandra.cdc.kafka.KafkaPublisher;
@@ -86,6 +87,7 @@ public class CdcPublisher implements Handler<Message<Object>>, PeriodicTask
     KafkaProducer<String, byte[]> producer;
     KafkaPublisher kafkaPublisher;
     private final Provider<SidecarCdcClient> sidecarCdcClientProvider;
+    private final CdcOptions cdcOptions;
 
     @Inject
     public CdcPublisher(Vertx vertx,
@@ -101,7 +103,8 @@ public class CdcPublisher implements Handler<Message<Object>>, PeriodicTask
                         Serializer<CdcEvent> avroSerializer,
                         Provider<RangeManager> rangeManagerProvider,
                         CassandraBridgeFactory cassandraBridgeFactory,
-                        Provider<SidecarCdcClient> sidecarCdcClientProvider)
+                        Provider<SidecarCdcClient> sidecarCdcClientProvider,
+                        CdcOptions cdcOptions)
     {
         this.sidecarCdcStats = sidecarCdcStats;
         this.executorPools = executorPools.internal();
@@ -117,6 +120,7 @@ public class CdcPublisher implements Handler<Message<Object>>, PeriodicTask
         this.rangeManagerProvider = rangeManagerProvider;
         this.cassandraBridgeFactory = cassandraBridgeFactory;
         this.sidecarCdcClientProvider = sidecarCdcClientProvider;
+        this.cdcOptions = cdcOptions;
 
         if (conf.cdcEnabled())
         {
@@ -189,7 +193,8 @@ public class CdcPublisher implements Handler<Message<Object>>, PeriodicTask
                     sidecarCdcClientProvider.get(),
                     cdcStats,
                     this.executorPools,
-                    databaseAccessor);
+                    databaseAccessor,
+                    cdcOptions);
             int consumerCount = cdcManager.buildCdcConsumers().size();
             cdcManager.startConsumers();
             LOGGER.info("{} CDC iterators started successfully", consumerCount);

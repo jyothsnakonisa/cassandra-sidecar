@@ -46,6 +46,13 @@ class CdcConsumerEntry
         return persister;
     }
 
+    void start()
+    {
+        persister.start();
+        consumer.initSchema();
+        consumer.start();
+    }
+
     void stop()
     {
         consumer.stop();           // blocking — waits for any active run() to complete

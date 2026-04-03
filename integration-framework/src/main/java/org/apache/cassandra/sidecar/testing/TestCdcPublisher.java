@@ -20,6 +20,7 @@ package org.apache.cassandra.sidecar.testing;
 import com.google.inject.Provider;
 import io.vertx.core.Vertx;
 import org.apache.cassandra.bridge.CassandraBridgeFactory;
+import org.apache.cassandra.cdc.api.CdcOptions;
 import org.apache.cassandra.cdc.api.EventConsumer;
 import org.apache.cassandra.cdc.api.SchemaSupplier;
 import org.apache.cassandra.cdc.msg.CdcEvent;
@@ -60,12 +61,13 @@ public class TestCdcPublisher extends CdcPublisher
                            Serializer<CdcEvent> avroSerializer,
                            Provider<RangeManager> rangeManagerProvider,
                            CassandraBridgeFactory cassandraBridgeFactory,
-                           Provider<SidecarCdcClient> sidecarCdcClientProvider)
+                           Provider<SidecarCdcClient> sidecarCdcClientProvider,
+                           CdcOptions cdcOptions)
     {
         super(vertx, executorPools, clusterConfigProvider,
               schemaSupplier, instanceMetadataFetcher, conf, databaseAccessor, cdcStats,
               virtualTables, sidecarCdcStats, avroSerializer, rangeManagerProvider,
-              cassandraBridgeFactory, sidecarCdcClientProvider);
+              cassandraBridgeFactory, sidecarCdcClientProvider, cdcOptions);
         this.databaseAccessor = databaseAccessor;
     }
 

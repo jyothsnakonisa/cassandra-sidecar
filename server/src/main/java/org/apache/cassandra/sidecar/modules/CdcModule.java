@@ -36,6 +36,7 @@ import jakarta.ws.rs.GET;
 import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
 import org.apache.cassandra.bridge.CassandraBridgeFactory;
+import org.apache.cassandra.cdc.api.CdcOptions;
 import org.apache.cassandra.cdc.api.SchemaSupplier;
 import org.apache.cassandra.cdc.avro.CqlToAvroSchemaConverter;
 import org.apache.cassandra.cdc.msg.CdcEvent;
@@ -54,6 +55,7 @@ import org.apache.cassandra.sidecar.cdc.CdcDynamicSidecarInstancesProvider;
 import org.apache.cassandra.sidecar.cdc.CdcLogCache;
 import org.apache.cassandra.sidecar.cdc.CdcPublisher;
 import org.apache.cassandra.sidecar.cdc.CdcSchemaSupplier;
+import org.apache.cassandra.sidecar.cdc.SidecarCdcOptions;
 import org.apache.cassandra.sidecar.cdc.SidecarCdcStats;
 import org.apache.cassandra.sidecar.cdc.SidecarClientSecretsProvider;
 import org.apache.cassandra.sidecar.cdc.SidecarClusterConfigProvider;
@@ -458,7 +460,8 @@ public class CdcModule extends AbstractModule
                               Serializer<CdcEvent> avroSerializer,
                               RangeManager rangeManager,
                               CassandraBridgeFactory cassandraBridgeFactory,
-                              Provider<SidecarCdcClient> sidecarCdcClientProvider)
+                              Provider<SidecarCdcClient> sidecarCdcClientProvider,
+                              CdcOptions cdcOptions)
     {
         return new CdcPublisher(vertx,
                                 executorPools,
@@ -473,7 +476,15 @@ public class CdcModule extends AbstractModule
                                 avroSerializer,
                                 () -> rangeManager,
                                 cassandraBridgeFactory,
-                                sidecarCdcClientProvider);
+                                sidecarCdcClientProvider,
+                                cdcOptions);
+    }
+
+    @Provides
+    @Singleton
+    public CdcOptions cdcOptions(InstanceMetadataFetcher instanceMetadataFetcher)
+    {
+        return new SidecarCdcOptions(instanceMetadataFetcher);
     }
 
     @Provides

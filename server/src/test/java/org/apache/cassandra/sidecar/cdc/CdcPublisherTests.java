@@ -20,19 +20,24 @@ package org.apache.cassandra.sidecar.cdc;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.function.Function;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import com.google.inject.Provider;
 import io.vertx.core.Vertx;
+import org.apache.cassandra.bridge.CassandraBridge;
 import org.apache.cassandra.bridge.CassandraBridgeFactory;
+import org.apache.cassandra.bridge.CassandraVersion;
+import org.apache.cassandra.cdc.api.CdcOptions;
 import org.apache.cassandra.cdc.api.EventConsumer;
 import org.apache.cassandra.cdc.api.SchemaSupplier;
 import org.apache.cassandra.cdc.msg.CdcEvent;
 import org.apache.cassandra.cdc.sidecar.ClusterConfigProvider;
 import org.apache.cassandra.cdc.sidecar.SidecarCdcClient;
 import org.apache.cassandra.cdc.stats.ICdcStats;
+import org.apache.cassandra.sidecar.cluster.instance.InstanceMetadata;
 import org.apache.cassandra.sidecar.concurrent.ExecutorPools;
 import org.apache.cassandra.sidecar.concurrent.TaskExecutorPool;
 import org.apache.cassandra.sidecar.coordination.RangeManager;
@@ -44,7 +49,10 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -81,6 +89,8 @@ public class CdcPublisherTests
     private CassandraBridgeFactory cassandraBridgeFactory;
     @Mock
     private SidecarCdcClient sidecarCdcClient;
+    @Mock
+    private CdcOptions cdcOptions;
 
     private CdcConfig cdcConfig;
     private CdcPublisher cdcPublisher;
@@ -112,7 +122,8 @@ public class CdcPublisherTests
             avroSerializer,
             rangeManager,
             cassandraBridgeFactory,
-            () -> sidecarCdcClient
+            () -> sidecarCdcClient,
+            cdcOptions
         );
     }
 
@@ -130,6 +141,16 @@ public class CdcPublisherTests
         when(cdcConfig.maxRecordSizeBytes()).thenReturn(1048576); // 1MB
         when(cdcConfig.failOnRecordTooLargeError()).thenReturn(false);
         when(cdcConfig.failOnKafkaError()).thenReturn(true);
+
+        InstanceMetadata mockInstance = mock(InstanceMetadata.class, RETURNS_DEEP_STUBS);
+        when(mockInstance.delegate().nodeSettings().releaseVersion()).thenReturn("4.1.0");
+        doAnswer(invocation -> {
+            Function<InstanceMetadata, Object> fn = invocation.getArgument(0);
+            return fn.apply(mockInstance);
+        }).when(instanceMetadataFetcher).callOnFirstAvailableInstance(any());
+        CassandraBridge mockBridge = mock(CassandraBridge.class);
+        when(mockBridge.getVersion()).thenReturn(CassandraVersion.FOURONE);
+        when(cassandraBridgeFactory.get(anyString())).thenReturn(mockBridge);
 
         EventConsumer result = cdcPublisher.eventConsumer(cdcConfig, avroSerializer);
 

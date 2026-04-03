@@ -29,6 +29,7 @@ import com.google.inject.Provides;
 import com.google.inject.Singleton;
 import io.vertx.core.Vertx;
 import org.apache.cassandra.bridge.CassandraBridgeFactory;
+import org.apache.cassandra.cdc.api.CdcOptions;
 import org.apache.cassandra.cdc.api.SchemaSupplier;
 import org.apache.cassandra.cdc.msg.CdcEvent;
 import org.apache.cassandra.cdc.sidecar.ClusterConfigProvider;
@@ -153,7 +154,8 @@ public abstract class SharedClusterCdcSidecarIntegrationTestBase extends SharedC
                                   Serializer<CdcEvent> avroSerializer,
                                   TokenRingProvider tokenRingProvider,
                                   CassandraBridgeFactory cassandraBridgeFactory,
-                                  Provider<SidecarCdcClient> sidecarCdcClientProvider)
+                                  Provider<SidecarCdcClient> sidecarCdcClientProvider,
+                                  CdcOptions cdcOptions)
         {
             RangeManager rangeManager = new ContentionFreeRangeManager(vertx, tokenRingProvider);
             return new TestCdcPublisher(vertx,
@@ -169,7 +171,8 @@ public abstract class SharedClusterCdcSidecarIntegrationTestBase extends SharedC
                                        avroSerializer,
                                        () -> rangeManager,
                                        cassandraBridgeFactory,
-                                       sidecarCdcClientProvider);
+                                       sidecarCdcClientProvider,
+                                       cdcOptions);
         }
 
         @Provides

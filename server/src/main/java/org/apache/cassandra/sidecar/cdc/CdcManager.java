@@ -18,7 +18,6 @@
 
 package org.apache.cassandra.sidecar.cdc;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -84,8 +83,9 @@ public class CdcManager
     private final SidecarCdcClient sidecarCdcClient;
     private final ICdcStats cdcStats;
     private List<CdcConsumerEntry> entries = new ArrayList<>();
-    private final TaskExecutorPool taskExecutorPool;
-    private final CdcDatabaseAccessor cdcDatabaseAccessor;
+    private final CdcOptions cdcOptions;
+    private final AsyncExecutor asyncExecutor;
+    private final StateSidecarCdcCassandraClient cassandraClient;
 
 
     public CdcManager(EventConsumer eventConsumer,
@@ -97,7 +97,8 @@ public class CdcManager
                       SidecarCdcClient sidecarCdcClient,
                       ICdcStats cdcStats,
                       TaskExecutorPool taskExecutorPool,
-                      CdcDatabaseAccessor cdcDatabaseAccessor)
+                      CdcDatabaseAccessor cdcDatabaseAccessor,
+                      CdcOptions cdcOptions)
     {
         this.eventConsumer = eventConsumer;
         this.schemaSupplier = schemaSupplier;
@@ -107,8 +108,9 @@ public class CdcManager
         this.clusterConfigProvider = clusterConfigProvider;
         this.sidecarCdcClient = sidecarCdcClient;
         this.cdcStats = cdcStats;
-        this.taskExecutorPool = taskExecutorPool;
-        this.cdcDatabaseAccessor = cdcDatabaseAccessor;
+        this.cdcOptions = cdcOptions;
+        this.asyncExecutor = new ExecutorPoolsExecutor(taskExecutorPool);
+        this.cassandraClient = new StateSidecarCdcCassandraClient(cdcDatabaseAccessor);
     }
 
     List<CdcConsumerEntry> buildCdcConsumers()
@@ -122,7 +124,9 @@ public class CdcManager
         // Deduplicate by (instanceId, tokenRange) to prevent duplicate consumers
         Map<String, CdcConsumerEntry> uniqueEntries = new HashMap<>(ownedRanges.values().stream().mapToInt(Set::size).sum());
 
-        ownedRanges.entrySet().stream()
+        try
+        {
+            ownedRanges.entrySet().stream()
                    .flatMap(entry ->
                             entry.getValue().stream().map(range -> {
                                 Integer instanceId = getInstanceId(entry.getKey());
@@ -133,57 +137,32 @@ public class CdcManager
                                                                  range.startAsBigInt(),
                                                                  range.endAsBigInt());
 
-                                return uniqueEntries.computeIfAbsent(uniqueKey, k -> {
-                                    try
-                                    {
-                                        return loadOrBuildCdcConsumer(instanceId,
-                                                                      clusterConfigProvider,
-                                                                      eventConsumer,
-                                                                      schemaSupplier,
-                                                                      () -> org.apache.cassandra.bridge.TokenRange.openClosed(range.startAsBigInt(), range.endAsBigInt()),
-                                                                      sidecarCdcClient,
-                                                                      conf,
-                                                                      cdcStats,
-                                                                      taskExecutorPool);
-                                    }
-                                    catch (IOException e)
-                                    {
-                                        throw new RuntimeException(e);
-                                    }
-                                });
+                                return uniqueEntries.computeIfAbsent(uniqueKey, k ->
+                                        buildConsumer(conf.jobId(),
+                                                      instanceId,
+                                                      clusterConfigProvider,
+                                                      eventConsumer,
+                                                      schemaSupplier,
+                                                      () -> org.apache.cassandra.bridge.TokenRange.openClosed(range.startAsBigInt(), range.endAsBigInt()),
+                                                      sidecarCdcClient,
+                                                      cdcStats));
                             }))
                    .collect(Collectors.toList());
 
-        entries = new ArrayList<>(uniqueEntries.values());
-        return entries;
-    }
-
-    CdcConsumerEntry loadOrBuildCdcConsumer(Integer instanceId,
-                                            ClusterConfigProvider clusterConfigProvider,
-                                            EventConsumer eventConsumer,
-                                            SchemaSupplier schemaSupplier,
-                                            TokenRangeSupplier tokenRangeSupplier,
-                                            SidecarCdcClient sidecarCdcClient,
-                                            CdcConfig conf,
-                                            ICdcStats cdcStats,
-                                            TaskExecutorPool taskExecutorPool) throws IOException
-    {
-        return buildConsumer(conf.jobId(),
-                             instanceId,
-                             new SidecarCdcOptions(instanceFetcher),
-                             clusterConfigProvider,
-                             eventConsumer,
-                             schemaSupplier,
-                             tokenRangeSupplier,
-                             sidecarCdcClient,
-                             cdcStats,
-                             taskExecutorPool);
+            entries = new ArrayList<>(uniqueEntries.values());
+            return entries;
+        }
+        catch (RuntimeException e)
+        {
+            // Stop any already-built consumers/persisters so timers and threads don't leak
+            uniqueEntries.values().forEach(CdcConsumerEntry::stop);
+            throw e;
+        }
     }
 
     public void startConsumers()
     {
-        entries.forEach(e -> e.consumer().initSchema());
-        entries.forEach(e -> e.consumer().start());
+        entries.forEach(CdcConsumerEntry::start);
     }
 
     public void stopConsumers()
@@ -207,43 +186,37 @@ public class CdcManager
     }
 
 
-    public CdcConsumerEntry buildConsumer(@NotNull String jobId,
+    CdcConsumerEntry buildConsumer(@NotNull String jobId,
                                           int partitionId,
-                                          CdcOptions cdcOptions,
                                           ClusterConfigProvider clusterConfigProvider,
                                           EventConsumer eventConsumer,
                                           SchemaSupplier schemaSupplier,
                                           TokenRangeSupplier tokenRangeSupplier,
                                           SidecarCdcClient sidecarCdcClient,
-                                          ICdcStats cdcStats,
-                                          TaskExecutorPool taskExecutorPool) throws IOException
+                                          ICdcStats cdcStats)
     {
-        AsyncExecutor asyncExecutor = new ExecutorPoolsExecutor(taskExecutorPool);
-        SidecarStatePersister persister = getSidecarStatePersister(cdcOptions, asyncExecutor);
-
-        SidecarCdc consumer = (SidecarCdc) SidecarCdc.builder(jobId,
-                                                              partitionId,
-                                                              cdcOptions,
-                                                              clusterConfigProvider,
-                                                              eventConsumer,
-                                                              schemaSupplier,
-                                                              tokenRangeSupplier,
-                                                              sidecarCdcClient,
-                                                              cdcStats)
-                                                      .withExecutor(asyncExecutor)
-                                                      .withStatePersister(persister)
-                                                      .build();
+        SidecarStatePersister persister = getSidecarStatePersister();
+        SidecarCdc consumer = SidecarCdc.builder(jobId,
+                                                  partitionId,
+                                                  cdcOptions,
+                                                  clusterConfigProvider,
+                                                  eventConsumer,
+                                                  schemaSupplier,
+                                                  tokenRangeSupplier,
+                                                  sidecarCdcClient,
+                                                  cdcStats)
+                                         .withExecutor(asyncExecutor)
+                                         .withSidecarStatePersister(persister)
+                                         .build();
         return new CdcConsumerEntry(consumer, persister);
     }
 
-    private @NotNull SidecarStatePersister getSidecarStatePersister(CdcOptions cdcOptions, AsyncExecutor asyncExecutor)
+    private @NotNull SidecarStatePersister getSidecarStatePersister()
     {
-        SidecarStatePersister sidecarStatePersister = new SidecarStatePersister(org.apache.cassandra.cdc.sidecar.SidecarCdcOptions.DEFAULT,
-                                                                                cdcOptions,
-                                                                                SidecarCdcStats.STUB,
-                                                                                new StateSidecarCdcCassandraClient(cdcDatabaseAccessor),
-                                                                                asyncExecutor);
-        sidecarStatePersister.start();
-        return sidecarStatePersister;
+        return new SidecarStatePersister(org.apache.cassandra.cdc.sidecar.SidecarCdcOptions.DEFAULT,
+                                         cdcOptions,
+                                         SidecarCdcStats.STUB,
+                                         cassandraClient,
+                                         asyncExecutor);
     }
 }
