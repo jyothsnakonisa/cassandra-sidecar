@@ -178,22 +178,34 @@ public class CdcPublisher implements Handler<Message<Object>>, PeriodicTask
         }
         databaseAccessor.session();
 
-        cdcManager = new CdcManager(eventConsumer(conf, avroSerializer),
-                                    schemaSupplier,
-                                    conf,
-                                    rangeManagerProvider.get(),
-                                    instanceMetadataFetcher,
-                                    clusterConfigProvider,
-                                    sidecarCdcClientProvider.get(),
-                                    cdcStats,
-                                    this.executorPools,
-                                    databaseAccessor);
-
-        int consumerCount = cdcManager.buildCdcConsumers().size();
-        cdcManager.startConsumers();
-        LOGGER.info("{} CDC iterators started successfully", consumerCount);
-        isRunning = true;
-        sidecarCdcStats.captureCdcStarted(consumerCount);
+        try
+        {
+            cdcManager = new CdcManager(eventConsumer(conf, avroSerializer),
+                    schemaSupplier,
+                    conf,
+                    rangeManagerProvider.get(),
+                    instanceMetadataFetcher,
+                    clusterConfigProvider,
+                    sidecarCdcClientProvider.get(),
+                    cdcStats,
+                    this.executorPools,
+                    databaseAccessor);
+            int consumerCount = cdcManager.buildCdcConsumers().size();
+            cdcManager.startConsumers();
+            LOGGER.info("{} CDC iterators started successfully", consumerCount);
+            isRunning = true;
+            sidecarCdcStats.captureCdcStarted(consumerCount);
+        }
+        catch (Exception e)
+        {
+            LOGGER.error("Failed to start CDC consumers, cleaning up resources", e);
+            if (cdcManager != null)
+            {
+                cdcManager.stopConsumers();
+            }
+            closeKafkaResources();
+            throw e;
+        }
     }
 
     private synchronized void restart()
@@ -239,6 +251,35 @@ public class CdcPublisher implements Handler<Message<Object>>, PeriodicTask
         {
             isRunning = false;
             isInitialized = false;
+            closeKafkaResources();
+        }
+    }
+
+    private void closeKafkaResources()
+    {
+        if (kafkaPublisher != null)
+        {
+            try
+            {
+                kafkaPublisher.close();
+            }
+            catch (Exception e)
+            {
+                LOGGER.warn("Error closing KafkaPublisher", e);
+            }
+            kafkaPublisher = null;
+        }
+        if (producer != null)
+        {
+            try
+            {
+                producer.close();
+            }
+            catch (Exception e)
+            {
+                LOGGER.warn("Error closing KafkaProducer", e);
+            }
+            producer = null;
         }
     }
 
