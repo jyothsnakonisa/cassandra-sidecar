@@ -23,7 +23,6 @@ import org.apache.cassandra.bridge.CassandraBridgeFactory;
 import org.apache.cassandra.cdc.api.CdcOptions;
 import org.apache.cassandra.cdc.api.EventConsumer;
 import org.apache.cassandra.cdc.api.SchemaSupplier;
-import org.apache.cassandra.cdc.msg.CdcEvent;
 import org.apache.cassandra.cdc.sidecar.ClusterConfigProvider;
 import org.apache.cassandra.cdc.sidecar.SidecarCdcClient;
 import org.apache.cassandra.cdc.stats.ICdcStats;
@@ -36,7 +35,6 @@ import org.apache.cassandra.sidecar.db.CdcDatabaseAccessor;
 import org.apache.cassandra.sidecar.db.VirtualTablesDatabaseAccessor;
 import org.apache.cassandra.sidecar.tasks.ScheduleDecision;
 import org.apache.cassandra.sidecar.utils.InstanceMetadataFetcher;
-import org.apache.kafka.common.serialization.Serializer;
 
 /**
  * Test implementation of CdcPublisher that uses an in-memory event consumer
@@ -49,30 +47,32 @@ public class TestCdcPublisher extends CdcPublisher
     private final CdcDatabaseAccessor databaseAccessor;
 
     public TestCdcPublisher(Vertx vertx,
-                           ExecutorPools executorPools,
-                           ClusterConfigProvider clusterConfigProvider,
-                           SchemaSupplier schemaSupplier,
-                           InstanceMetadataFetcher instanceMetadataFetcher,
-                           CdcConfig conf,
-                           CdcDatabaseAccessor databaseAccessor,
-                           ICdcStats cdcStats,
-                           VirtualTablesDatabaseAccessor virtualTables,
-                           SidecarCdcStats sidecarCdcStats,
-                           Serializer<CdcEvent> avroSerializer,
-                           Provider<RangeManager> rangeManagerProvider,
-                           CassandraBridgeFactory cassandraBridgeFactory,
-                           Provider<SidecarCdcClient> sidecarCdcClientProvider,
-                           CdcOptions cdcOptions)
+                            ExecutorPools executorPools,
+                            ClusterConfigProvider clusterConfigProvider,
+                            SchemaSupplier schemaSupplier,
+                            InstanceMetadataFetcher instanceMetadataFetcher,
+                            CdcConfig conf,
+                            CdcDatabaseAccessor databaseAccessor,
+                            ICdcStats cdcStats,
+                            VirtualTablesDatabaseAccessor virtualTables,
+                            SidecarCdcStats sidecarCdcStats,
+                            Provider<RangeManager> rangeManagerProvider,
+                            CassandraBridgeFactory cassandraBridgeFactory,
+                            Provider<SidecarCdcClient> sidecarCdcClientProvider,
+                            CdcOptions cdcOptions)
     {
         super(vertx, executorPools, clusterConfigProvider,
               schemaSupplier, instanceMetadataFetcher, conf, databaseAccessor, cdcStats,
-              virtualTables, sidecarCdcStats, avroSerializer, rangeManagerProvider,
-              cassandraBridgeFactory, sidecarCdcClientProvider, cdcOptions);
+              virtualTables, sidecarCdcStats, rangeManagerProvider,
+              cassandraBridgeFactory, sidecarCdcClientProvider,
+              null,
+              null,
+              cdcOptions);
         this.databaseAccessor = databaseAccessor;
     }
 
     @Override
-    public EventConsumer eventConsumer(CdcConfig conf, Serializer<CdcEvent> avroSerializer)
+    public EventConsumer eventConsumer(CdcConfig conf)
     {
         return testEventConsumer;
     }

@@ -39,7 +39,7 @@ import org.apache.cassandra.bridge.CassandraBridgeFactory;
 import org.apache.cassandra.cdc.api.CdcOptions;
 import org.apache.cassandra.cdc.api.SchemaSupplier;
 import org.apache.cassandra.cdc.avro.CqlToAvroSchemaConverter;
-import org.apache.cassandra.cdc.msg.CdcEvent;
+import org.apache.cassandra.cdc.kafka.KafkaProducerFactory;
 import org.apache.cassandra.cdc.schemastore.SchemaStorePublisherFactory;
 import org.apache.cassandra.cdc.sidecar.CdcSidecarInstancesProvider;
 import org.apache.cassandra.cdc.sidecar.ClusterConfigProvider;
@@ -48,7 +48,6 @@ import org.apache.cassandra.cdc.stats.CdcStats;
 import org.apache.cassandra.cdc.stats.ICdcStats;
 import org.apache.cassandra.secrets.SecretsProvider;
 import org.apache.cassandra.sidecar.cdc.CachingSchemaStore;
-import org.apache.cassandra.sidecar.cdc.CdcAvroSerializer;
 import org.apache.cassandra.sidecar.cdc.CdcConfig;
 import org.apache.cassandra.sidecar.cdc.CdcConfigImpl;
 import org.apache.cassandra.sidecar.cdc.CdcDynamicSidecarInstancesProvider;
@@ -109,7 +108,6 @@ import org.apache.cassandra.sidecar.tasks.PeriodicTask;
 import org.apache.cassandra.sidecar.utils.InstanceMetadataFetcher;
 import org.apache.cassandra.sidecar.utils.SidecarClientProvider;
 import org.apache.cassandra.sidecar.utils.TokenSplitUtil;
-import org.apache.kafka.common.serialization.Serializer;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.enums.SchemaType;
 import org.eclipse.microprofile.openapi.annotations.media.Content;
@@ -345,11 +343,9 @@ public class CdcModule extends AbstractModule
 
     @Provides
     @Singleton
-    public Serializer<CdcEvent> getSerializer(CachingSchemaStore schemaStore,
-                                              InstanceMetadataFetcher instanceMetadataFetcher,
-                                              CassandraBridgeFactory cassandraBridgeFactory)
+    public KafkaProducerFactory kafkaProducerFactory()
     {
-        return new CdcAvroSerializer(schemaStore, instanceMetadataFetcher, cassandraBridgeFactory);
+        return KafkaProducerFactory.DEFAULT;
     }
 
     @Provides
@@ -457,10 +453,11 @@ public class CdcModule extends AbstractModule
                               ICdcStats cdcStats,
                               VirtualTablesDatabaseAccessor virtualTables,
                               SidecarCdcStats sidecarCdcStats,
-                              Serializer<CdcEvent> avroSerializer,
                               RangeManager rangeManager,
                               CassandraBridgeFactory cassandraBridgeFactory,
                               Provider<SidecarCdcClient> sidecarCdcClientProvider,
+                              CachingSchemaStore schemaStore,
+                              KafkaProducerFactory kafkaProducerFactory,
                               CdcOptions cdcOptions)
     {
         return new CdcPublisher(vertx,
@@ -473,10 +470,11 @@ public class CdcModule extends AbstractModule
                                 cdcStats,
                                 virtualTables,
                                 sidecarCdcStats,
-                                avroSerializer,
                                 () -> rangeManager,
                                 cassandraBridgeFactory,
                                 sidecarCdcClientProvider,
+                                schemaStore,
+                                kafkaProducerFactory,
                                 cdcOptions);
     }
 

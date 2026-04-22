@@ -39,6 +39,7 @@ import org.apache.avro.generic.GenericDatumReader;
 import org.apache.avro.generic.GenericDatumWriter;
 import org.apache.avro.generic.GenericRecord;
 
+import org.apache.cassandra.cdc.avro.AvroSchemaUtils;
 import org.apache.cassandra.cdc.avro.AvroSchemas;
 import org.apache.cassandra.cdc.avro.CqlToAvroSchemaConverter;
 import org.apache.cassandra.cdc.kafka.KafkaOptions;
@@ -56,8 +57,21 @@ import static org.apache.cassandra.sidecar.server.SidecarServerEvents.ON_SERVER_
 import static org.apache.cassandra.sidecar.server.SidecarServerEvents.ON_SIDECAR_SCHEMA_INITIALIZED;
 
 /**
- * Schemas cache to be used by CDC event serialization. It contains a map of table schemas
- * using TableIdentifier as key.
+ * Schemas cache for CDC event serialization, keyed by TableIdentifier.
+ *
+ * <p>{@link #getSchema}, {@link #getWriter}, and {@link #getReader} all return the
+ * <em>payload</em> (table-column) Avro schema — not the CDC envelope. Every caller in the
+ * analytics codec uses these to build and encode per-row payload records (column field lookup,
+ * range predicate encoding, byte-record encoding). Returning the merged envelope schema here
+ * would break those callers because table columns are not top-level fields of the envelope.
+ *
+ * <p>The merged CDC envelope schema is constructed on-the-fly in {@link #publishSchemas} and
+ * is never stored in the cache. The sidecar remains the authoritative source for building the
+ * merged schema (via {@link #buildMergedSchema}); it is just not exposed through
+ * {@link SchemaStore#getSchema}.
+ *
+ * <p>Schema version UUIDs ({@link #getVersion}) are derived from the CQL {@code CREATE TABLE}
+ * statement, consistent with the analytics {@code CachingSchemaStore} implementation.
  */
 @Singleton
 public class CachingSchemaStore implements SchemaStore
@@ -91,13 +105,13 @@ public class CachingSchemaStore implements SchemaStore
         this.tableHistoryDatabaseAccessor = tableHistoryDatabaseAccessor;
         this.sidecarSchema = sidecarSchema;
         this.cqlToAvroSchemaConverter = cqlToAvroSchemaConverter;
-        this.avroSchemasCache.putAll(createSchemaCache(cassandraClusterSchemaMonitor.getCdcTables()));
-        AvroSchemas.registerLogicalTypes();
-        cassandraClusterSchemaMonitor.addSchemaChangeListener(this::onSchemaChanged);
         this.vertx = vertx;
         this.cdcConfig = cdcConfig;
         this.sidecarCdcStats = sidecarCdcStats;
         this.schemaStorePublisherFactory = schemaStorePublisherFactory;
+        this.avroSchemasCache.putAll(createSchemaCache(cassandraClusterSchemaMonitor.getCdcTables()));
+        AvroSchemas.registerLogicalTypes();
+        cassandraClusterSchemaMonitor.addSchemaChangeListener(this::onSchemaChanged);
 
         if (cdcConfig.cdcEnabled())
         {
@@ -155,16 +169,28 @@ public class CachingSchemaStore implements SchemaStore
             {
                 if (null != publisher)
                 {
-                    Schema schema = cqlToAvroSchemaConverter.convert(cqlTable);
+                    // Merged schema is only needed for Kafka publishing — build on-the-fly,
+                    // not stored in the cache entry (getSchema/getWriter/getReader use payload).
+                    Schema mergedSchema = buildMergedSchema(cqlTable);
                     TableSchemaPublisher.SchemaPublishMetadata metadata = new TableSchemaPublisher.SchemaPublishMetadata();
                     metadata.put(METADATA_NAME_KEY, cqlTable.table());
                     metadata.put(METADATA_NAMESPACE_KEY, cqlTable.keyspace());
-                    publisher.publishSchema(schema.toString(false), metadata);
+                    publisher.publishSchema(mergedSchema.toString(false), metadata);
                     sidecarCdcStats.capturePublishedSchema();
                 }
-                return new SchemaCacheEntry(cqlTable, cqlToAvroSchemaConverter);
+                return new SchemaCacheEntry(cqlTable, cqlToAvroSchemaConverter.convert(cqlTable));
             });
         }
+    }
+
+    private Schema buildMergedSchema(CqlTable cqlTable)
+    {
+        Schema payloadSchema = cqlToAvroSchemaConverter.convert(cqlTable);
+        String prefix = cdcConfig.schemaNamespacePrefix();
+        String namespace = prefix.isEmpty()
+                           ? cqlTable.keyspace()
+                           : prefix + '.' + cqlTable.keyspace();
+        return AvroSchemaUtils.buildMergedSchema(payloadSchema, cqlTable.table(), namespace);
     }
 
     @VisibleForTesting
@@ -183,7 +209,7 @@ public class CachingSchemaStore implements SchemaStore
                         tableHistoryDatabaseAccessor.insertTableSchemaHistory(cqlTable.keyspace(), cqlTable.table(), cqlTable.createStatement());
                     }
                     LOGGER.info("Re-generating Avro Schema after schema change keyspace={} table={}", tableIdentifier.keyspace(), tableIdentifier.table());
-                    return new SchemaCacheEntry(cqlTable, cqlToAvroSchemaConverter);
+                    return new SchemaCacheEntry(cqlTable, cqlToAvroSchemaConverter.convert(cqlTable));
                 }
                 return v;
             });
@@ -250,7 +276,7 @@ public class CachingSchemaStore implements SchemaStore
 
         return cdcTables.stream()
                         .collect(Collectors.toMap(cqlTable -> TableIdentifier.of(cqlTable.keyspace(), cqlTable.table()),
-                                                  cqlTable -> new SchemaCacheEntry(cqlTable, cqlToAvroSchemaConverter))
+                                                  cqlTable -> new SchemaCacheEntry(cqlTable, cqlToAvroSchemaConverter.convert(cqlTable)))
                         );
     }
 
@@ -268,14 +294,13 @@ public class CachingSchemaStore implements SchemaStore
         private final GenericDatumWriter<GenericRecord> writer;
         private final GenericDatumReader<GenericRecord> reader;
 
-        private SchemaCacheEntry(CqlTable table,
-                                 CqlToAvroSchemaConverter cqlToAvroSchemaConverter)
+        private SchemaCacheEntry(CqlTable table, Schema payloadSchema)
         {
             this.table = table;
-            this.schema = cqlToAvroSchemaConverter.convert(table);
+            this.schema = payloadSchema;
             this.schemaUuid = UUID.nameUUIDFromBytes(table.createStatement().getBytes(StandardCharsets.UTF_8)).toString();
-            this.writer = new GenericDatumWriter<>(schema);
-            this.reader = new GenericDatumReader<>(schema);
+            this.writer = new GenericDatumWriter<>(payloadSchema);
+            this.reader = new GenericDatumReader<>(payloadSchema);
         }
 
         public String tableSchema()

@@ -33,7 +33,7 @@ import org.apache.cassandra.bridge.CassandraVersion;
 import org.apache.cassandra.cdc.api.CdcOptions;
 import org.apache.cassandra.cdc.api.EventConsumer;
 import org.apache.cassandra.cdc.api.SchemaSupplier;
-import org.apache.cassandra.cdc.msg.CdcEvent;
+import org.apache.cassandra.cdc.kafka.KafkaProducerFactory;
 import org.apache.cassandra.cdc.sidecar.ClusterConfigProvider;
 import org.apache.cassandra.cdc.sidecar.SidecarCdcClient;
 import org.apache.cassandra.cdc.stats.ICdcStats;
@@ -44,7 +44,7 @@ import org.apache.cassandra.sidecar.coordination.RangeManager;
 import org.apache.cassandra.sidecar.db.CdcDatabaseAccessor;
 import org.apache.cassandra.sidecar.db.VirtualTablesDatabaseAccessor;
 import org.apache.cassandra.sidecar.utils.InstanceMetadataFetcher;
-import org.apache.kafka.common.serialization.Serializer;
+import org.apache.kafka.clients.producer.KafkaProducer;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
@@ -82,7 +82,9 @@ public class CdcPublisherTests
     @Mock
     private SidecarCdcStats sidecarCdcStats;
     @Mock
-    private Serializer<CdcEvent> avroSerializer;
+    private KafkaProducerFactory kafkaProducerFactory;
+    @Mock
+    private CachingSchemaStore schemaStore;
     @Mock
     private Provider<RangeManager> rangeManager;
     @Mock
@@ -119,14 +121,14 @@ public class CdcPublisherTests
             cdcStats,
             virtualTables,
             sidecarCdcStats,
-            avroSerializer,
             rangeManager,
             cassandraBridgeFactory,
             () -> sidecarCdcClient,
+            schemaStore,
+            kafkaProducerFactory,
             cdcOptions
         );
     }
-
 
     @Test
     void testEventConsumerCreatesValidConsumer()
@@ -151,12 +153,11 @@ public class CdcPublisherTests
         CassandraBridge mockBridge = mock(CassandraBridge.class);
         when(mockBridge.getVersion()).thenReturn(CassandraVersion.FOURONE);
         when(cassandraBridgeFactory.get(anyString())).thenReturn(mockBridge);
+        when(kafkaProducerFactory.create(any())).thenReturn(mock(KafkaProducer.class));
 
-        EventConsumer result = cdcPublisher.eventConsumer(cdcConfig, avroSerializer);
+        EventConsumer result = cdcPublisher.eventConsumer(cdcConfig);
 
         assertThat(result).isNotNull();
         assertThat(result).isInstanceOf(CdcEventConsumer.class);
     }
-
-
 }

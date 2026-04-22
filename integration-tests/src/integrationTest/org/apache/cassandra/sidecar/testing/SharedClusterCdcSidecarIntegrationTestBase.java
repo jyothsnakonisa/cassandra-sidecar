@@ -31,7 +31,6 @@ import io.vertx.core.Vertx;
 import org.apache.cassandra.bridge.CassandraBridgeFactory;
 import org.apache.cassandra.cdc.api.CdcOptions;
 import org.apache.cassandra.cdc.api.SchemaSupplier;
-import org.apache.cassandra.cdc.msg.CdcEvent;
 import org.apache.cassandra.cdc.sidecar.ClusterConfigProvider;
 import org.apache.cassandra.cdc.sidecar.SidecarCdcClient;
 import org.apache.cassandra.cdc.stats.ICdcStats;
@@ -52,7 +51,6 @@ import org.apache.cassandra.sidecar.db.CdcDatabaseAccessor;
 import org.apache.cassandra.sidecar.db.VirtualTablesDatabaseAccessor;
 import org.apache.cassandra.sidecar.utils.InstanceMetadataFetcher;
 import org.apache.cassandra.testing.ClusterBuilderConfiguration;
-import org.apache.kafka.common.serialization.Serializer;
 
 /**
  * Base class for CDC integration tests. Extends SharedClusterIntegrationTestBase with
@@ -151,7 +149,6 @@ public abstract class SharedClusterCdcSidecarIntegrationTestBase extends SharedC
                                   ICdcStats cdcStats,
                                   VirtualTablesDatabaseAccessor virtualTables,
                                   SidecarCdcStats sidecarCdcStats,
-                                  Serializer<CdcEvent> avroSerializer,
                                   TokenRingProvider tokenRingProvider,
                                   CassandraBridgeFactory cassandraBridgeFactory,
                                   Provider<SidecarCdcClient> sidecarCdcClientProvider,
@@ -168,7 +165,6 @@ public abstract class SharedClusterCdcSidecarIntegrationTestBase extends SharedC
                                        cdcStats,
                                        virtualTables,
                                        sidecarCdcStats,
-                                       avroSerializer,
                                        () -> rangeManager,
                                        cassandraBridgeFactory,
                                        sidecarCdcClientProvider,

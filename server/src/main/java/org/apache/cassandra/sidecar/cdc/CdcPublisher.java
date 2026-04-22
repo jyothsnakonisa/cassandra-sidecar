@@ -21,7 +21,6 @@ package org.apache.cassandra.sidecar.cdc;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-
 import com.google.inject.Inject;
 import com.google.inject.Provider;
 import com.google.inject.Singleton;
@@ -32,16 +31,16 @@ import io.vertx.core.eventbus.Message;
 import org.apache.cassandra.bridge.CassandraBridgeFactory;
 import org.apache.cassandra.bridge.CassandraVersion;
 import org.apache.cassandra.cdc.CdcLogMode;
+import org.apache.cassandra.cdc.TypeCache;
 import org.apache.cassandra.cdc.api.CdcOptions;
 import org.apache.cassandra.cdc.api.EventConsumer;
 import org.apache.cassandra.cdc.api.SchemaSupplier;
+import org.apache.cassandra.cdc.kafka.KafkaProducerFactory;
 import org.apache.cassandra.cdc.kafka.KafkaPublisher;
 import org.apache.cassandra.cdc.kafka.TopicSupplier;
-import org.apache.cassandra.cdc.msg.CdcEvent;
 import org.apache.cassandra.cdc.sidecar.ClusterConfigProvider;
 import org.apache.cassandra.cdc.sidecar.SidecarCdcClient;
 import org.apache.cassandra.cdc.stats.ICdcStats;
-
 import org.apache.cassandra.sidecar.common.server.utils.DurationSpec;
 import org.apache.cassandra.sidecar.common.server.utils.MillisecondBoundConfiguration;
 import org.apache.cassandra.sidecar.concurrent.ExecutorPools;
@@ -52,8 +51,6 @@ import org.apache.cassandra.sidecar.db.VirtualTablesDatabaseAccessor;
 import org.apache.cassandra.sidecar.tasks.PeriodicTask;
 import org.apache.cassandra.sidecar.tasks.ScheduleDecision;
 import org.apache.cassandra.sidecar.utils.InstanceMetadataFetcher;
-import org.apache.kafka.clients.producer.KafkaProducer;
-import org.apache.kafka.common.serialization.Serializer;
 
 import static org.apache.cassandra.sidecar.server.SidecarServerEvents.ON_CDC_CACHE_WARMED_UP;
 import static org.apache.cassandra.sidecar.server.SidecarServerEvents.ON_CDC_CONFIGURATION_CHANGED;
@@ -81,12 +78,12 @@ public class CdcPublisher implements Handler<Message<Object>>, PeriodicTask
     private final ClusterConfigProvider clusterConfigProvider;
     private final ICdcStats cdcStats;
     private CdcManager cdcManager;
-    private final Serializer<CdcEvent> avroSerializer;
     private final Provider<RangeManager> rangeManagerProvider;
     private final CassandraBridgeFactory cassandraBridgeFactory;
-    KafkaProducer<String, byte[]> producer;
-    KafkaPublisher kafkaPublisher;
+    private final CachingSchemaStore schemaStore;
+    private KafkaPublisher<?> kafkaPublisher;
     private final Provider<SidecarCdcClient> sidecarCdcClientProvider;
+    private final KafkaProducerFactory kafkaProducerFactory;
     private final CdcOptions cdcOptions;
 
     @Inject
@@ -100,10 +97,11 @@ public class CdcPublisher implements Handler<Message<Object>>, PeriodicTask
                         ICdcStats cdcStats,
                         VirtualTablesDatabaseAccessor virtualTables,
                         SidecarCdcStats sidecarCdcStats,
-                        Serializer<CdcEvent> avroSerializer,
                         Provider<RangeManager> rangeManagerProvider,
                         CassandraBridgeFactory cassandraBridgeFactory,
                         Provider<SidecarCdcClient> sidecarCdcClientProvider,
+                        CachingSchemaStore schemaStore,
+                        KafkaProducerFactory kafkaProducerFactory,
                         CdcOptions cdcOptions)
     {
         this.sidecarCdcStats = sidecarCdcStats;
@@ -111,15 +109,15 @@ public class CdcPublisher implements Handler<Message<Object>>, PeriodicTask
         this.conf = conf;
         this.databaseAccessor = databaseAccessor;
         this.virtualTables = virtualTables;
-
         this.schemaSupplier = schemaSupplier;
         this.instanceMetadataFetcher = instanceMetadataFetcher;
         this.clusterConfigProvider = clusterConfigProvider;
         this.cdcStats = cdcStats;
-        this.avroSerializer = avroSerializer;
         this.rangeManagerProvider = rangeManagerProvider;
         this.cassandraBridgeFactory = cassandraBridgeFactory;
         this.sidecarCdcClientProvider = sidecarCdcClientProvider;
+        this.schemaStore = schemaStore;
+        this.kafkaProducerFactory = kafkaProducerFactory;
         this.cdcOptions = cdcOptions;
 
         if (conf.cdcEnabled())
@@ -133,30 +131,23 @@ public class CdcPublisher implements Handler<Message<Object>>, PeriodicTask
         }
     }
 
-    public EventConsumer eventConsumer(CdcConfig conf,
-                                       Serializer<CdcEvent> avroSerializer)
+    public EventConsumer eventConsumer(CdcConfig conf)
     {
-        if (this.producer != null)
-        {
-            this.producer.close();
-        }
-        if (this.kafkaPublisher != null)
-        {
-            this.kafkaPublisher.close();
-        }
-        this.producer = new KafkaProducer<>(conf.kafkaConfigs());
         CassandraVersion version = cassandraBridgeFactory.get(
             instanceMetadataFetcher.callOnFirstAvailableInstance(instance ->
                 instance.delegate().nodeSettings()).releaseVersion()
         ).getVersion();
-        this.kafkaPublisher = new KafkaPublisher(version,
-                                                 TopicSupplier.staticTopicSupplier(conf.kafkaTopic()),
-                                                 producer,
-                                                 avroSerializer,
-                                                 conf.maxRecordSizeBytes(),
-                                                 conf.failOnRecordTooLargeError(),
-                                                 conf.failOnKafkaError(),
-                                                 CdcLogMode.FULL);
+        this.kafkaPublisher = KafkaPublisher.create(version,
+                                                    TopicSupplier.staticTopicSupplier(conf.kafkaTopic()),
+                                                    conf.kafkaConfigs(),
+                                                    kafkaProducerFactory,
+                                                    schemaStore,
+                                                    key -> TypeCache.get(version).getType(key.keyspace, key.type),
+                                                    conf.schemaNamespacePrefix(),
+                                                    conf.maxRecordSizeBytes(),
+                                                    conf.failOnRecordTooLargeError(),
+                                                    conf.failOnKafkaError(),
+                                                    CdcLogMode.FULL);
         return new CdcEventConsumer(kafkaPublisher);
     }
 
@@ -184,7 +175,7 @@ public class CdcPublisher implements Handler<Message<Object>>, PeriodicTask
 
         try
         {
-            cdcManager = new CdcManager(eventConsumer(conf, avroSerializer),
+            cdcManager = new CdcManager(eventConsumer(conf),
                     schemaSupplier,
                     conf,
                     rangeManagerProvider.get(),
@@ -273,18 +264,6 @@ public class CdcPublisher implements Handler<Message<Object>>, PeriodicTask
                 LOGGER.warn("Error closing KafkaPublisher", e);
             }
             kafkaPublisher = null;
-        }
-        if (producer != null)
-        {
-            try
-            {
-                producer.close();
-            }
-            catch (Exception e)
-            {
-                LOGGER.warn("Error closing KafkaProducer", e);
-            }
-            producer = null;
         }
     }
 
