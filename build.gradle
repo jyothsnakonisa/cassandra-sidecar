@@ -140,6 +140,10 @@ allprojects {
 
         // for dtest jar
         mavenLocal()
+
+        maven {
+            url "https://repository.apache.org/content/repositories/orgapachecassandra-1457/"
+        }
     }
 
     checkstyle {
