@@ -61,7 +61,7 @@ import org.apache.cassandra.spark.utils.TableIdentifier;
  * to {@link #delay()} here). Both loops source their table set from the same
  * {@code CdcSchemaSupplier} / {@link org.apache.cassandra.sidecar.cdc.CdcBatchRiskAnalyzer}
  * computation and call {@code CdcBridge#updateCdcSchema} — but only <em>this</em> class calls
- * {@code CdcBridge#unregisterTables} to remove a table once it's no longer at risk of a CDC
+ * {@code CdcBridge#unregisterNonCdcTables} to remove a table once it's no longer at risk of a CDC
  * batch. This is intentional, not an oversight: {@code Cdc.refreshSchema()} is shared code used
  * by non-sidecar CDC consumers that have no equivalent monitor, so it was left register-only.
  * In a normal sidecar deployment both loops run, and re-registration by the other loop never
@@ -166,7 +166,7 @@ public class CassandraClusterSchemaMonitor implements PeriodicTask
                                         .collect(Collectors.joining(",")));
                     try
                     {
-                        cdcBridge.unregisterTables(staleIds);
+                        cdcBridge.unregisterNonCdcTables(staleIds);
                     }
                     catch (Throwable t)
                     {

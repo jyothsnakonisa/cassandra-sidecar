@@ -291,16 +291,16 @@ class CassandraClusterSchemaMonitorTest
 
             // First refresh: both tables are at risk, both registered, nothing to unregister yet
             clusterSchema.refresh();
-            verify(mockCdcBridge, never()).unregisterTables(any(Set.class));
+            verify(mockCdcBridge, never()).unregisterNonCdcTables(any(Set.class));
 
             // Second refresh: non_cdc_table is no longer at risk — must be unregistered, and
-            // updateCdcSchema (register/update) must be called before unregisterTables so
+            // updateCdcSchema (register/update) must be called before unregisterNonCdcTables so
             // there's never a window where a still-needed table is missing.
             clusterSchema.refresh();
 
             org.mockito.InOrder inOrder = org.mockito.Mockito.inOrder(mockCdcBridge);
             inOrder.verify(mockCdcBridge, times(2)).updateCdcSchema(any(Set.class), eq(Partitioner.Murmur3Partitioner), any());
-            inOrder.verify(mockCdcBridge).unregisterTables(eq(Set.of(TableIdentifier.of("test", "non_cdc_table"))));
+            inOrder.verify(mockCdcBridge).unregisterNonCdcTables(eq(Set.of(TableIdentifier.of("test", "non_cdc_table"))));
         }
     }
 
@@ -330,7 +330,7 @@ class CassandraClusterSchemaMonitorTest
             clusterSchema.refresh();
             clusterSchema.refresh();
 
-            verify(mockCdcBridge, never()).unregisterTables(any(Set.class));
+            verify(mockCdcBridge, never()).unregisterNonCdcTables(any(Set.class));
         }
     }
 
@@ -384,19 +384,19 @@ class CassandraClusterSchemaMonitorTest
             // First refresh: both at risk, nothing stale yet.
             clusterSchema.refresh();
 
-            // Second refresh: non_cdc_table becomes stale, but unregisterTables fails.
+            // Second refresh: non_cdc_table becomes stale, but unregisterNonCdcTables fails.
             Mockito.doThrow(new RuntimeException("simulated bridge failure"))
-                  .when(mockCdcBridge).unregisterTables(eq(staleSet));
+                  .when(mockCdcBridge).unregisterNonCdcTables(eq(staleSet));
             clusterSchema.refresh();
-            verify(mockCdcBridge, times(1)).unregisterTables(eq(staleSet));
+            verify(mockCdcBridge, times(1)).unregisterNonCdcTables(eq(staleSet));
 
             // Third refresh (schema "changes" again, though the table set is identical): since
             // the failed unregistration must not have been forgotten, non_cdc_table is still
-            // treated as stale and unregisterTables is retried with the same set.
+            // treated as stale and unregisterNonCdcTables is retried with the same set.
             Mockito.reset(mockCdcBridge);
             cdcBridgeFactory.when(() -> CdcBridgeFactory.getCdcBridge(any(CassandraBridge.class))).thenReturn(mockCdcBridge);
             clusterSchema.refresh();
-            verify(mockCdcBridge, times(1)).unregisterTables(eq(staleSet));
+            verify(mockCdcBridge, times(1)).unregisterNonCdcTables(eq(staleSet));
         }
     }
 
