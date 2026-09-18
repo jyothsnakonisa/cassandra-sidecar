@@ -423,6 +423,16 @@ class SidecarConfigurationTest
         assertThat(cdcConfig.segmentHardLinkCacheExpiry().unit()).isEqualTo(TimeUnit.MINUTES);
         assertThat(cdcConfig.isEnabled()).isEqualTo(true);
         assertThat(cdcConfig.cdcConfigRefreshTime()).isEqualTo(MillisecondBoundConfiguration.parse("10s"));
+        assertThat(cdcConfig.batchStatementsEnabled()).isFalse();
+    }
+
+    @Test
+    void testCdcConfigurationBatchStatementsEnabledDefaultsToTrue() throws IOException
+    {
+        Path yamlPath = yaml("config/sidecar_single_instance.yaml");
+        SidecarConfigurationImpl sidecarConfiguration = SidecarConfigurationImpl.readYamlConfiguration(yamlPath);
+        CdcConfiguration cdcConfig = sidecarConfiguration.serviceConfiguration().cdcConfiguration();
+        assertThat(cdcConfig.batchStatementsEnabled()).isTrue();
     }
 
     @Test
