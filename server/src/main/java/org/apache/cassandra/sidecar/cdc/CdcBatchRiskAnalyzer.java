@@ -40,8 +40,10 @@ import org.jetbrains.annotations.NotNull;
  * ever be co-located in the same {@code Mutation} this way if they share partition key
  * <em>structure</em> — the same ordered list of partition-key column types — since a batch
  * statement must supply matching partition key values across the statements it groups, and that
- * requires the same types in the same order (column names are irrelevant to Cassandra's
- * grouping).
+ * requires the same declared CQL type in most cases, but not always: some distinct types share
+ * an identical fixed-width encoding (e.g. {@code bigint}/{@code timestamp}, both 8 bytes), which
+ * {@link CdcUtil.PartitionKeySignature#structurallyMatches} also treats as matching (column
+ * names are irrelevant to Cassandra's grouping either way).
  *
  * <p>This class registers every CDC-enabled table unconditionally (they must always be
  * registered, since we need to publish their events), plus any non-CDC table in the same

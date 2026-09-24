@@ -244,4 +244,52 @@ class CdcBatchRiskAnalyzerTest
         assertThat(result).containsOnlyKeys(id("ks1", "cdc_table"), id("ks1", "non_cdc_table1"),
                                             id("ks1", "non_cdc_table2"));
     }
+
+    @Test
+    void testBigintAndTimestampShareByteEncodingIncludesNonCdcTable()
+    {
+        // bigint and timestamp both serialize as an 8-byte big-endian long — a bigint value of 1
+        // and a timestamp one millisecond after the epoch are byte-identical on the wire, so
+        // Cassandra can co-locate them in the same batch Mutation even though the declared types
+        // differ.
+        Map<TableIdentifier, CdcUtil.TableSchema> userTables = new HashMap<>();
+        userTables.put(id("ks1", "cdc_table"), schema(true, "bigint"));
+        userTables.put(id("ks1", "non_cdc_table"), schema(false, "timestamp"));
+
+        Map<TableIdentifier, CdcUtil.TableSchema> result =
+        CdcBatchRiskAnalyzer.computeTablesToRegister(userTables, true);
+
+        assertThat(result).containsOnlyKeys(id("ks1", "cdc_table"), id("ks1", "non_cdc_table"));
+    }
+
+    @Test
+    void testDifferentFixedWidthTypesStillExcludeNonCdcTable()
+    {
+        // bigint (8 bytes) and int (4 bytes) can never share bytes at the same position — the
+        // byte-width relaxation must not become a blanket "any numeric type matches" rule.
+        Map<TableIdentifier, CdcUtil.TableSchema> userTables = new HashMap<>();
+        userTables.put(id("ks1", "cdc_table"), schema(true, "bigint"));
+        userTables.put(id("ks1", "non_cdc_table"), schema(false, "int"));
+
+        Map<TableIdentifier, CdcUtil.TableSchema> result =
+        CdcBatchRiskAnalyzer.computeTablesToRegister(userTables, true);
+
+        assertThat(result).containsOnlyKeys(id("ks1", "cdc_table"));
+    }
+
+    @Test
+    void testVariableLengthTypeStillRequiresExactNameMatch()
+    {
+        // blob has no fixed, type-bounded byte width, so it must fall back to exact-name
+        // equality rather than being treated as an automatic match against everything (which
+        // would defeat the point of the risk analysis for the common case of blob/text columns).
+        Map<TableIdentifier, CdcUtil.TableSchema> userTables = new HashMap<>();
+        userTables.put(id("ks1", "cdc_table"), schema(true, "bigint"));
+        userTables.put(id("ks1", "non_cdc_table"), schema(false, "blob"));
+
+        Map<TableIdentifier, CdcUtil.TableSchema> result =
+        CdcBatchRiskAnalyzer.computeTablesToRegister(userTables, true);
+
+        assertThat(result).containsOnlyKeys(id("ks1", "cdc_table"));
+    }
 }

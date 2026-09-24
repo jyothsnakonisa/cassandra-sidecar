@@ -30,7 +30,9 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableMap;
 
+import com.datastax.driver.core.DataType;
 import org.apache.cassandra.spark.utils.TableIdentifier;
 import org.jetbrains.annotations.NotNull;
 
@@ -218,21 +220,39 @@ public final class CdcUtil
 
     /**
      * A structural signature for a table's partition key: the ordered list of normalized CQL
-     * type strings declared for each partition-key column, in partition-key position order.
-     * Column names are intentionally not part of the signature — a CQL {@code BEGIN BATCH}
-     * statement only needs matching partition key VALUES to be supplied across statements
-     * targeting different tables for Cassandra to merge them into one commit-log
-     * {@code Mutation}; that requires the same types in the same order, not the same column
-     * names.
+     * type strings declared for each partition-key column. Column names don't matter — only
+     * whether two tables' partition keys could ever serialize to the same bytes in a batch.
      *
-     * <p>An {@link #indeterminate} signature (couldn't be confidently parsed — unrecognized
-     * {@code PRIMARY KEY} syntax, unresolvable column type, etc.) {@link #structurallyMatches}
-     * every other signature. This is a deliberate fail-safe: a table we're unsure about is
-     * always included in the registered schema, never silently excluded.
+     * <p>An {@link #indeterminate} signature (couldn't be confidently parsed) matches every
+     * other signature via {@link #structurallyMatches} — a fail-safe so an unparseable table is
+     * always included rather than silently excluded.
      */
     public static final class PartitionKeySignature
     {
         private static final PartitionKeySignature INDETERMINATE = new PartitionKeySignature(null, true);
+
+        /**
+         * Native CQL types with a fixed, known serialized width, mapped to that width in bytes.
+         * Two types at the same width (e.g. {@code bigint}/{@code timestamp}, both 8 bytes) can
+         * be byte-identical for every value, so {@link #structurallyMatches} treats them as
+         * matching. Types not listed here (blob, text, varint, collections, UDTs, ...) have no
+         * such guarantee and fall back to exact type-name equality instead.
+         */
+        private static final Map<DataType.Name, Integer> FIXED_WIDTH_BYTES =
+            new ImmutableMap.Builder<DataType.Name, Integer>()
+                .put(DataType.Name.TINYINT, 1)
+                .put(DataType.Name.BOOLEAN, 1)
+                .put(DataType.Name.SMALLINT, 2)
+                .put(DataType.Name.INT, 4)
+                .put(DataType.Name.DATE, 4)
+                .put(DataType.Name.FLOAT, 4)
+                .put(DataType.Name.BIGINT, 8)
+                .put(DataType.Name.TIMESTAMP, 8)
+                .put(DataType.Name.TIME, 8)
+                .put(DataType.Name.DOUBLE, 8)
+                .put(DataType.Name.UUID, 16)
+                .put(DataType.Name.TIMEUUID, 16)
+                .build();
 
         public final List<String> columnTypes;
         public final boolean indeterminate;
@@ -265,7 +285,40 @@ public final class CdcUtil
             {
                 return true;
             }
-            return this.columnTypes.equals(other.columnTypes);
+            if (this.columnTypes.size() != other.columnTypes.size())
+            {
+                return false;
+            }
+            for (int i = 0; i < this.columnTypes.size(); i++)
+            {
+                if (!canShareBytes(this.columnTypes.get(i), other.columnTypes.get(i)))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        private static boolean canShareBytes(String typeA, String typeB)
+        {
+            if (typeA.equals(typeB))
+            {
+                return true;
+            }
+            Integer width = fixedWidthBytes(typeA);
+            return width != null && width.equals(fixedWidthBytes(typeB));
+        }
+
+        private static Integer fixedWidthBytes(String normalizedType)
+        {
+            try
+            {
+                return FIXED_WIDTH_BYTES.get(DataType.Name.valueOf(normalizedType.toUpperCase()));
+            }
+            catch (IllegalArgumentException e)
+            {
+                return null;
+            }
         }
 
         @Override
