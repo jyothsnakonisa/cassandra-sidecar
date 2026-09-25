@@ -67,7 +67,7 @@ public class CdcConfigurationImpl implements CdcConfiguration
     public static final SecondBoundConfiguration DEFAULT_CDC_CACHE_MAX_USAGE_DURATION = SecondBoundConfiguration.parse("15m");
 
     public static final String BATCH_STATEMENTS_ENABLED_PROPERTY = "batch_statements_enabled";
-    public static final boolean DEFAULT_BATCH_STATEMENTS_ENABLED = true;
+    public static final boolean DEFAULT_BATCH_STATEMENTS_ENABLED = false;
 
     @JsonProperty(value = IS_ENABLED_PROPERTY)
     private final boolean isEnabled;

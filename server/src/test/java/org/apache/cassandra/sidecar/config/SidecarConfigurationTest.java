@@ -427,12 +427,12 @@ class SidecarConfigurationTest
     }
 
     @Test
-    void testCdcConfigurationBatchStatementsEnabledDefaultsToTrue() throws IOException
+    void testCdcConfigurationBatchStatementsEnabledDefaultsToFalse() throws IOException
     {
         Path yamlPath = yaml("config/sidecar_single_instance.yaml");
         SidecarConfigurationImpl sidecarConfiguration = SidecarConfigurationImpl.readYamlConfiguration(yamlPath);
         CdcConfiguration cdcConfig = sidecarConfiguration.serviceConfiguration().cdcConfiguration();
-        assertThat(cdcConfig.batchStatementsEnabled()).isTrue();
+        assertThat(cdcConfig.batchStatementsEnabled()).isFalse();
     }
 
     @Test

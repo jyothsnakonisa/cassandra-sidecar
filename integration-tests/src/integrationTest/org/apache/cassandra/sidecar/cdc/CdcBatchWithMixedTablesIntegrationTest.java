@@ -44,9 +44,11 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * <p>This test exercises the real, wired-up sidecar CDC pipeline (real in-JVM Cassandra cluster,
  * real {@link org.apache.cassandra.sidecar.cdc.CdcSchemaSupplier}, real
- * {@link org.apache.cassandra.sidecar.tasks.CassandraClusterSchemaMonitor}, default
- * {@code batch_statements_enabled=true}) rather than constructing a {@code Mutation} directly,
- * so it validates the fix end-to-end against production wiring. It also covers the new
+ * {@link org.apache.cassandra.sidecar.tasks.CassandraClusterSchemaMonitor}, with
+ * {@code batch_statements_enabled=true} explicitly configured by the test harness — see
+ * {@link org.apache.cassandra.sidecar.testing.SharedClusterCdcSidecarIntegrationTestBase}) rather
+ * than constructing a {@code Mutation} directly, so it validates the fix end-to-end against
+ * production wiring. It also covers the new
  * partition-key-structure risk analysis (see {@link org.apache.cassandra.sidecar.cdc.CdcBatchRiskAnalyzer}):
  * a non-CDC table with a DIFFERENT partition-key type than any CDC-enabled table in its keyspace
  * is excluded from the registered schema entirely, since it could never be co-located with a
