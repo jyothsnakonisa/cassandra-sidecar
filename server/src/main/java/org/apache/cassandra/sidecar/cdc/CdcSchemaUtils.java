@@ -79,12 +79,12 @@ public final class CdcSchemaUtils
      *                               statements; see {@link CdcBatchRiskAnalyzer}
      * @return set of user tables that need to be registered, with correct CDC flags
      */
-    public static Set<CqlTable> buildAllUserTables(@NotNull String fullSchema,
-                                                   @NotNull Partitioner partitioner,
-                                                   @NotNull ConcurrentHashMap<TableIdentifier, UUID> tableIdCache,
-                                                   @NotNull Function<TableIdentifier, UUID> tableIdLoader,
-                                                   @NotNull CassandraBridge cassandraBridge,
-                                                   boolean batchStatementsEnabled)
+    public static Set<CqlTable> buildTablesToRegisterForCDC(@NotNull String fullSchema,
+                                                            @NotNull Partitioner partitioner,
+                                                            @NotNull ConcurrentHashMap<TableIdentifier, UUID> tableIdCache,
+                                                            @NotNull Function<TableIdentifier, UUID> tableIdLoader,
+                                                            @NotNull CassandraBridge cassandraBridge,
+                                                            boolean batchStatementsEnabled)
     {
         Map<TableIdentifier, CdcUtil.TableSchema> allTables = CdcUtil.extractAllTablesWithCdcFlag(fullSchema);
 

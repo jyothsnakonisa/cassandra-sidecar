@@ -83,7 +83,7 @@ public class CdcSchemaSupplier implements SchemaSupplier
         Partitioner partitioner = getPartitioner(nodeSettings);
         boolean batchStatementsEnabled = sidecarConfiguration.serviceConfiguration().cdcConfiguration().batchStatementsEnabled();
 
-        Set<CqlTable> allTables = CdcSchemaUtils.buildAllUserTables(schema, partitioner, tableIdCache,
+        Set<CqlTable> allTables = CdcSchemaUtils.buildTablesToRegisterForCDC(schema, partitioner, tableIdCache,
                                                                      cdcDatabaseAccessor::getTableId,
                                                                      cassandraBridge, batchStatementsEnabled);
         return CompletableFuture.completedFuture(allTables);

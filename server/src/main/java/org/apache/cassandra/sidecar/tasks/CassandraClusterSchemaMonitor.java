@@ -126,15 +126,15 @@ public class CassandraClusterSchemaMonitor implements PeriodicTask
                 // are derived by filtering on CqlTable.cdc() — avoids a separate schema parse
                 // pass.
                 boolean batchStatementsEnabled = sidecarConfiguration.serviceConfiguration().cdcConfiguration().batchStatementsEnabled();
-                Set<CqlTable> allUserTables = CdcSchemaUtils.buildAllUserTables(fullSchemaText,
+                Set<CqlTable> tablesToRegisterForCDC = CdcSchemaUtils.buildTablesToRegisterForCDC(fullSchemaText,
                                                                                 getPartitioner(nodeSettings),
                                                                                 tableIdCache,
                                                                                 databaseAccessor::getTableId,
                                                                                 cassandraBridge,
                                                                                 batchStatementsEnabled);
-                Set<CqlTable> updatedCdcTables = allUserTables.stream()
-                                                              .filter(CqlTable::cdc)
-                                                              .collect(Collectors.toSet());
+                Set<CqlTable> updatedCdcTables = tablesToRegisterForCDC.stream()
+                                                                       .filter(CqlTable::cdc)
+                                                                       .collect(Collectors.toSet());
                 LOGGER.info("Cdc enabled tables tables='{}'",
                             updatedCdcTables.stream()
                                             .map(m -> String.format("%s.%s", m.keyspace(), m.table()))
@@ -145,7 +145,7 @@ public class CassandraClusterSchemaMonitor implements PeriodicTask
                 // tables to deserialize commit log mutations without throwing
                 // UnknownTableException — how much of the schema that covers depends on
                 // batchStatementsEnabled (see above).
-                cdcBridge.updateCdcSchema(allUserTables, getPartitioner(nodeSettings),
+                cdcBridge.updateCdcSchema(tablesToRegisterForCDC, getPartitioner(nodeSettings),
                                           ((keyspace, table) -> tableIdCache.get(TableIdentifier.of(keyspace, table))));
 
                 // Unregister any table that was registered by a previous refresh but is no
@@ -153,9 +153,9 @@ public class CassandraClusterSchemaMonitor implements PeriodicTask
                 // dropped, or either table's partition key was altered so they no longer share
                 // structure). Always register/update BEFORE unregistering, so there is never a
                 // window where a still-needed table is missing from Schema.instance.
-                Set<TableIdentifier> newlyRegisteredIds = allUserTables.stream()
-                                                                       .map(t -> TableIdentifier.of(t.keyspace(), t.table()))
-                                                                       .collect(Collectors.toSet());
+                Set<TableIdentifier> newlyRegisteredIds = tablesToRegisterForCDC.stream()
+                                                                                .map(t -> TableIdentifier.of(t.keyspace(), t.table()))
+                                                                                .collect(Collectors.toSet());
                 Set<TableIdentifier> staleIds = new HashSet<>(lastRegisteredTables.get());
                 staleIds.removeAll(newlyRegisteredIds);
                 if (!staleIds.isEmpty())
