@@ -401,6 +401,48 @@ class CassandraClusterSchemaMonitorTest
     }
 
     @Test
+    void testRefreshRetriesFailedUnregistrationWhenSchemaTextIsUnchanged()
+    {
+        String keyspace = "CREATE KEYSPACE test WITH REPLICATION = {'class':'SimpleStrategy', 'replication_factor':'1'};";
+        String initialCdcTable = "CREATE TABLE test.cdc_table (id uuid PRIMARY KEY, data text) WITH cdc = true;";
+        String nonCdcTable = "CREATE TABLE test.non_cdc_table (id uuid PRIMARY KEY, data text);";
+        String initialSchema = keyspace + initialCdcTable + nonCdcTable;
+        String changedCdcTable = "CREATE TABLE test.cdc_table (id text PRIMARY KEY, data text) WITH cdc = true;";
+        String changedSchema = keyspace + changedCdcTable + nonCdcTable;
+        CdcBridge cdcBridge = mock(CdcBridge.class);
+
+        when(mockCassandraBridgeFactory.get(anyString())).thenReturn(mockCassandraBridge);
+        when(mockCassandraBridge.buildSchema(anyString(), anyString(), any(ReplicationFactor.class), any(Partitioner.class),
+                                             any(Set.class), any(UUID.class), any(Integer.class), any(Boolean.class)))
+            .thenAnswer(CassandraClusterSchemaMonitorTest::mockCqlTableFromBuildSchemaArgs);
+        when(mockDatabaseAccessor.fullSchema()).thenReturn(initialSchema, changedSchema, changedSchema);
+
+        CassandraClusterSchemaMonitor monitor = new CassandraClusterSchemaMonitor(
+            mockInstanceFetcher,
+            mockDatabaseAccessor,
+            mockDriverUnsupportedSchemaCache,
+            mockSidecarConfiguration,
+            mockCassandraBridgeFactory,
+            ignored -> cdcBridge
+        );
+
+        monitor.refresh();
+        Mockito.doThrow(new RuntimeException("bridge unregistration failure"))
+               .doNothing()
+               .when(cdcBridge).unregisterNonCdcTables(any(Set.class));
+        monitor.refresh();
+        verify(cdcBridge, times(1)).unregisterNonCdcTables(any(Set.class));
+        assertThat(monitor.getRegisteredTables()).contains(TableIdentifier.of("test", "non_cdc_table"));
+
+        monitor.refresh();
+
+        verify(cdcBridge, times(2)).unregisterNonCdcTables(any(Set.class));
+        assertThat(monitor.getRegisteredTables())
+            .as("an unchanged schema must retry the stale-table unregistration that escaped the bridge")
+            .doesNotContain(TableIdentifier.of("test", "non_cdc_table"));
+    }
+
+    @Test
     void testRefreshSkipsProcessingWhenSchemaUnchanged()
     {
         try (MockedStatic<CdcBridgeFactory> cdcBridgeFactory = Mockito.mockStatic(CdcBridgeFactory.class);
@@ -735,6 +777,8 @@ class CassandraClusterSchemaMonitorTest
         CqlTable cqlTable = mock(CqlTable.class);
         when(cqlTable.keyspace()).thenReturn(keyspace);
         when(cqlTable.table()).thenReturn(table);
+        when(cqlTable.cdc()).thenReturn(invocation.getArgument(7));
         return cqlTable;
     }
+
 }

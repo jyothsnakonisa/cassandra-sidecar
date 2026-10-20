@@ -26,6 +26,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -84,6 +85,7 @@ public class CassandraClusterSchemaMonitor implements PeriodicTask
     private final SidecarConfiguration sidecarConfiguration;
     private final InstanceMetadataFetcher instanceFetcher;
     private final CassandraBridgeFactory cassandraBridgeFactory;
+    private final Function<CassandraBridge, CdcBridge> cdcBridgeResolver;
 
     public CassandraClusterSchemaMonitor(InstanceMetadataFetcher instanceFetcher,
                                          CdcDatabaseAccessor databaseAccessor,
@@ -91,12 +93,24 @@ public class CassandraClusterSchemaMonitor implements PeriodicTask
                                          SidecarConfiguration sidecarConfiguration,
                                          CassandraBridgeFactory cassandraBridgeFactory)
     {
+        this(instanceFetcher, databaseAccessor, driverUnsupportedSchemaCache, sidecarConfiguration,
+             cassandraBridgeFactory, CdcBridgeFactory::getCdcBridge);
+    }
 
+    @VisibleForTesting
+    CassandraClusterSchemaMonitor(InstanceMetadataFetcher instanceFetcher,
+                                  CdcDatabaseAccessor databaseAccessor,
+                                  DriverUnsupportedSchemaCache driverUnsupportedSchemaCache,
+                                  SidecarConfiguration sidecarConfiguration,
+                                  CassandraBridgeFactory cassandraBridgeFactory,
+                                  Function<CassandraBridge, CdcBridge> cdcBridgeResolver)
+    {
         this.instanceFetcher = instanceFetcher;
         this.databaseAccessor = databaseAccessor;
         this.driverUnsupportedSchemaCache = driverUnsupportedSchemaCache;
         this.sidecarConfiguration = sidecarConfiguration;
         this.cassandraBridgeFactory = cassandraBridgeFactory;
+        this.cdcBridgeResolver = cdcBridgeResolver;
     }
 
     public void addSchemaChangeListener(Runnable listener)
@@ -108,7 +122,7 @@ public class CassandraClusterSchemaMonitor implements PeriodicTask
     {
         NodeSettings nodeSettings = instanceFetcher.callOnFirstAvailableInstance(instance -> instance.delegate().nodeSettings());
         CassandraBridge cassandraBridge = cassandraBridgeFactory.get(nodeSettings.releaseVersion());
-        CdcBridge cdcBridge = CdcBridgeFactory.getCdcBridge(cassandraBridge);
+        CdcBridge cdcBridge = cdcBridgeResolver.apply(cassandraBridge);
 
         try
         {

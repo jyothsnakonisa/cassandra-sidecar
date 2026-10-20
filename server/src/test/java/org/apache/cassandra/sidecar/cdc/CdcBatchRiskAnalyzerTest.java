@@ -18,12 +18,19 @@
 
 package org.apache.cassandra.sidecar.cdc;
 
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
+import com.datastax.driver.core.ProtocolVersion;
+import com.datastax.driver.core.TypeCodec;
 import org.apache.cassandra.sidecar.utils.CdcUtil;
 import org.apache.cassandra.spark.utils.TableIdentifier;
 
@@ -75,6 +82,32 @@ class CdcBatchRiskAnalyzerTest
         CdcBatchRiskAnalyzer.computeTablesToRegister(userTables, true);
 
         assertThat(result).containsOnlyKeys(id("ks1", "cdc_table"), id("ks1", "non_cdc_table"));
+    }
+
+    @ParameterizedTest
+    @MethodSource("byteEquivalentPartitionKeyTypes")
+    void testByteEquivalentPartitionKeyTypesIncludeNonCdcTable(String cdcType, String nonCdcType, long partitionKey)
+    {
+        assertThat(TypeCodec.bigint().serialize(partitionKey, ProtocolVersion.V4))
+        .isEqualTo(TypeCodec.timestamp().serialize(new Date(partitionKey), ProtocolVersion.V4));
+
+        String schema = "CREATE TABLE ks1.cdc_table (id " + cdcType + " PRIMARY KEY, value int) WITH cdc = true;"
+                        + "CREATE TABLE ks1.non_cdc_table (id " + nonCdcType + " PRIMARY KEY, value int) WITH cdc = false;";
+
+        Map<TableIdentifier, CdcUtil.TableSchema> result = CdcBatchRiskAnalyzer.computeTablesToRegister(
+        CdcUtil.extractAllTablesWithCdcFlag(schema), true);
+
+        assertThat(result).containsOnlyKeys(id("ks1", "cdc_table"), id("ks1", "non_cdc_table"));
+    }
+
+    private static Stream<Arguments> byteEquivalentPartitionKeyTypes()
+    {
+        return Stream.of("bigint", "timestamp")
+                     .flatMap(cdcType -> {
+                         String nonCdcType = "timestamp".equals(cdcType) ? "bigint" : "timestamp";
+                         return Stream.of(0L, 1L, -1L, Long.MIN_VALUE, Long.MAX_VALUE)
+                                      .map(partitionKey -> Arguments.of(cdcType, nonCdcType, partitionKey));
+                     });
     }
 
     @Test
